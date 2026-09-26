@@ -1,0 +1,20 @@
+# Gradle
+.gradle/
+build/
+
+# Loom / run
+run/
+remappedSrc/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.eclipse/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

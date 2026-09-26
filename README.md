@@ -1,0 +1,110 @@
+# RCV — Redstone Connection Visualized
+
+**中文** | [English](README.md)
+
+RCV 可视化任意红石元件在**拓扑意义上**的上游输入（`in`）与下游输出（`out`）连接图。
+它只判断“是否存在连接”，**不做时序 / 信号强度仿真**，也不做故障检测。
+
+RCV visualises the **topological** upstream inputs (`in`) and downstream outputs (`out`) of any redstone
+component. It only answers "is there a connection", and deliberately does **not** simulate timing or
+signal strength, nor detect faults.
+
+- 平台 / Platform: **Fabric**, Minecraft **1.21.11**, Java **21**
+- Mod id: `rcv`
+- 许可 / License: **LGPL-3.0**（见 [LICENSE](LICENSE)）
+
+## 功能 / Features
+
+- 13 类连接 / 13 connection types:
+  激活 `direct_activation`、电路 `circuit`（含比较器侧输入 `comparator_side`）、模拟读数 `analog`、
+  充能 `charge`、半连接 / QC `half`、绊线 `tripwire`、活塞 `piston`、门两半 `door_pair`、
+  **轨道 `rail`**、**形状 `shape`**、**距离 `distance`**、NC 更新 `nc`、PP 更新 `pp`。
+- 单次请求计算可达子图，带深度、区域裁剪、节点 / 边上限，结果稳定排序。
+- 世界空间线框叠加：节点立方体、边线、箭头、via 菱形路径；按类型配色，深度越深越淡。
+- 魔杖取点与区域选区（默认紫色染料）。
+- 服务端兜底（`S only`）：原版客户端收到聊天汇总 + 粒子。
+- 客户端 / 服务端 JSON 配置，服务端命令支持 `/rcv reload` 热重载。
+- 色盲友好备用调色板（Okabe-Ito）。
+
+### 三种连接方式说明 / Notes on the added types
+
+- **轨道 `rail`**：动力铁轨 / 激活铁轨从信号源起单向延伸，最多 8 格；包含斜向与曲线连接。
+- **形状 `shape`**：栅栏、墙、钟等“连通性方块”依据邻近方块形状 / 状态改变自身状态时，
+  记为 被检查方块 → 连通性方块 的单向连接（如上方墙决定下方墙的中心柱）。
+- **距离 `distance`**：树叶之间双向；脚手架水平双向、垂直向上。
+- **PP 默认档 = 仅侦测器 `observer_only`**：只显示侦测器侦测其正前方方块；可在配置中改为 `all`。
+
+## 命令 / Commands
+
+```
+/rcv in  <x> <y> <z> [depth] [options]
+/rcv out <x> <y> <z> [depth] [options]
+/rcv clear
+/rcv refresh
+/rcv reload        (服务端 / server)
+/rcv types
+```
+
+- 坐标支持 `~` 相对坐标；`depth` 省略时默认 16。
+- `options`：`--no-<type>`（如 `--no-nc --no-pp`）与 `--region <x1> <y1> <z1> <x2> <y2> <z2>`（绝对整数）。
+
+客户端额外子命令 / extra client subcommands:
+
+```
+/rcv mode in|out
+/rcv depth <n>
+/rcv wand <true|false>
+/rcv region mode <true|false>
+/rcv region clear
+/rcv colorblind <true|false>
+```
+
+## 魔杖 / Wand
+
+- 手持**紫色染料**右键方块 = 以此方块为起点并按当前模式查询。
+- `wand = false` 关闭魔杖；`region mode true` 后：左键设 pos1、右键设 pos2 并应用区域，
+  Shift+右键清除区域。
+
+## 运行形态 / Environments
+
+| 形态 | 说明 |
+|---|---|
+| `C only`（客户端装 mod，服务端不装） | 客户端本地对已加载区块计算并渲染 |
+| `S+C` | 客户端本地计算并渲染（本版未启用服务端权威下发，见“已知限制”） |
+| `S only`（客户端原版） | 服务端计算并发送聊天汇总 + 粒子 |
+
+## 构建 / Build
+
+```bash
+./gradlew build          # 产物在 build/libs/rcv-<version>.jar
+./gradlew test           # 核心模型单测
+./gradlew runClient      # 开发环境启动客户端
+./gradlew runServer      # 开发环境启动服务端
+```
+
+## 已知限制 / Known limitations
+
+- 服务端权威的图下发（协议 v1 分块传输 `rcv:graph`）尚未实现：`S+C` 下由客户端本地计算。
+- `compat` 复刻的红石线 / 中继器 / 比较器判定需与逐版本真实行为做游戏内对照（规划附录 D3）。
+- PP `all` 档、NC `all` 档可能产生大量边，受节点 / 边上限保护。
+
+## 配置 / Config
+
+- `config/rcv-client.json`：颜色、备用调色板、线宽、默认深度、显示类型、HUD、自动清理、魔杖物品、PP/NC 模式。
+- `config/rcv-server.json`：启用、权限、最大深度 / 节点 / 边、NC/PP 模式、轨道范围。
+
+## 致谢 / Credits
+
+思路与架构参考以下项目（**参考实现均尽量重写**）：
+
+| 项目 | 用途 | 许可 |
+|---|---|---|
+| SubTick / SubTick-fork | 多版本 preprocess、phase/queue、渲染组织 | LGPL-3.0 |
+| microtimingreplay / fork | NC/PP 捕获、网络、UI、选区操作与可视化参考 | MIT |
+| lucidity2.0 | Stonecutter、ModMenu、渲染管理 | 未声明 |
+| ryansrenderingkit | 线框 / 文本（可选） | MIT |
+| guardian | 逐版本反编译源码，核对判定（**不进产物**） | MC EULA |
+| cloth-config | 客户端配置 UI（本版未集成） | LGPL-3.0 |
+| fabric-api / fabric-mod-template / ModMenu | 平台与工程 | Apache-2.0 / LGPL-3.0 / MIT |
+
+本项目的红石判定均基于 Mojang 官方映射（**Mojmap**）下的 `1.21.11` 原版行为复刻。

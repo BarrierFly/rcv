@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "rcv",
+  "version": "${version}",
+  "name": "RCV — Redstone Connection Visualized",
+  "description": "Visualize the upstream inputs and downstream outputs of any redstone component: topology only, no timing simulation.",
+  "authors": [
+    "rcvmod"
+  ],
+  "contact": {},
+  "license": "LGPL-3.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.rcvmod.rcv.RCV"
+    ],
+    "client": [
+      "dev.rcvmod.rcv.client.RcvClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
