@@ -188,25 +188,26 @@ class EngineTest {
     }
 
     @Test
-    void comparatorSideInputNeedsControlInput() {
+    void comparatorSideInputIsTopological() {
         BlockPos comparator = new BlockPos(0, 0, 0);
         BlockPos side = new BlockPos(1, 0, 0);
         BlockState comparatorState = Blocks.COMPARATOR.defaultBlockState()
                 .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH);
 
-        // A standing torch emits no strong signal sideways, so it must not become a side input.
-        FakeWorld noSignal = new FakeWorld()
+        // Topology-only: any strong-signal source counts, even one whose direct signal points away.
+        FakeWorld torch = new FakeWorld()
                 .set(comparator, comparatorState)
                 .set(side, Blocks.REDSTONE_TORCH.defaultBlockState());
-        assertFalse(hasEdge(compute(noSignal, side, QueryMode.OUT),
+        assertTrue(hasEdge(compute(torch, side, QueryMode.OUT),
                 EdgeType.COMPARATOR_SIDE, side, comparator));
 
-        // A redstone block does provide 15 as a control input regardless of direction.
-        FakeWorld withSignal = new FakeWorld()
+        // A plain conductor is not a signal source, so it is not a control input. Query IN so the
+        // engine still calls outgoing(side) for a non-startable block.
+        FakeWorld stone = new FakeWorld()
                 .set(comparator, comparatorState)
-                .set(side, Blocks.REDSTONE_BLOCK.defaultBlockState())
-                .controlInput(side, 15);
-        assertTrue(hasEdge(compute(withSignal, side, QueryMode.OUT),
+                .set(side, Blocks.STONE.defaultBlockState())
+                .conductor(side);
+        assertFalse(hasEdge(compute(stone, comparator, QueryMode.IN),
                 EdgeType.COMPARATOR_SIDE, side, comparator));
     }
 
@@ -249,18 +250,70 @@ class EngineTest {
     }
 
     @Test
-    void openFenceGateSupportsScaffoldingAbove() {
-        BlockPos gate = new BlockPos(0, 0, 0);
-        BlockPos scaffold = new BlockPos(0, 1, 0);
-        FakeWorld world = new FakeWorld()
-                .set(gate, Blocks.OAK_FENCE_GATE.defaultBlockState()
-                        .setValue(BlockStateProperties.OPEN, true))
-                .set(scaffold, Blocks.SCAFFOLDING.defaultBlockState())
-                .sturdyWhenClosed(gate, Direction.UP);
+    void repeaterSideInputOnlyFromDiodeFacingIt() {
+        BlockPos repeater = new BlockPos(0, 0, 0);
+        BlockPos side = new BlockPos(1, 0, 0);
+        BlockState repeaterState = Blocks.REPEATER.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH);
 
-        assertTrue(hasEdge(compute(world, gate, QueryMode.OUT), EdgeType.DISTANCE, gate, scaffold));
-        assertTrue(hasEdge(compute(world, scaffold, QueryMode.IN), EdgeType.DISTANCE, gate, scaffold));
-        assertFalse(hasEdge(compute(world, scaffold, QueryMode.OUT), EdgeType.DISTANCE, gate, scaffold));
+        // A repeater whose output faces west feeds this repeater's east side and locks it.
+        FakeWorld facingIn = new FakeWorld()
+                .set(repeater, repeaterState)
+                .set(side, Blocks.REPEATER.defaultBlockState()
+                        .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)); // output = WEST
+        assertTrue(hasEdge(compute(facingIn, side, QueryMode.OUT),
+                EdgeType.REPEATER_SIDE, side, repeater));
+
+        // A repeater whose output faces away does not lock.
+        FakeWorld facingAway = new FakeWorld()
+                .set(repeater, repeaterState)
+                .set(side, Blocks.REPEATER.defaultBlockState()
+                        .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.WEST)); // output = EAST
+        assertFalse(hasEdge(compute(facingAway, side, QueryMode.OUT),
+                EdgeType.REPEATER_SIDE, side, repeater));
+
+        // A torch is not a diode, so it cannot lock a repeater.
+        FakeWorld torch = new FakeWorld()
+                .set(repeater, repeaterState)
+                .set(side, Blocks.REDSTONE_TORCH.defaultBlockState());
+        assertFalse(hasEdge(compute(torch, side, QueryMode.OUT),
+                EdgeType.REPEATER_SIDE, side, repeater));
+    }
+
+    @Test
+    void wireNcReachesTwoHopNeighbours() {
+        BlockPos wire = new BlockPos(0, 0, 0);
+        BlockPos twoHop = new BlockPos(2, 0, 0);
+        FakeWorld world = new FakeWorld()
+                .set(wire, Blocks.REDSTONE_WIRE.defaultBlockState())
+                .set(twoHop, Blocks.OAK_FENCE.defaultBlockState());
+
+        // The signal-change path updates the 6 neighbours of the wire and of each of its neighbours.
+        assertTrue(hasEdge(compute(world, wire, QueryMode.OUT, PpMode.OFF, NcMode.ALL),
+                EdgeType.NC, wire, twoHop));
+        assertTrue(hasEdge(compute(world, twoHop, QueryMode.IN, PpMode.OFF, NcMode.ALL),
+                EdgeType.NC, wire, twoHop));
+    }
+
+    @Test
+    void pistonMovedBlocksEmitNcAndPp() {
+        BlockPos piston = new BlockPos(0, 0, 0);
+        BlockPos moved = new BlockPos(1, 0, 0);
+        BlockPos movedNeighbour = new BlockPos(1, 0, 1);
+        FakeWorld world = new FakeWorld()
+                .set(piston, Blocks.PISTON.defaultBlockState()
+                        .setValue(BlockStateProperties.FACING, Direction.EAST))
+                .set(moved, Blocks.STONE.defaultBlockState())
+                .set(movedNeighbour, Blocks.OAK_FENCE.defaultBlockState())
+                .piston(new PistonResult(true, List.of(moved), List.of()));
+
+        ConnectionGraph ncGraph = compute(world, piston, QueryMode.OUT, PpMode.OFF, NcMode.ALL);
+        assertTrue(hasEdge(ncGraph, EdgeType.PISTON, piston, moved));
+        assertTrue(hasEdge(ncGraph, EdgeType.NC, moved, movedNeighbour));
+
+        // NC outranks PP for the same pair, so PP is checked with NC disabled.
+        ConnectionGraph ppGraph = compute(world, piston, QueryMode.OUT, PpMode.ALL, NcMode.OFF);
+        assertTrue(hasEdge(ppGraph, EdgeType.PP, moved, movedNeighbour));
     }
 
     @Test
@@ -297,7 +350,7 @@ class EngineTest {
         private final Set<BlockPos> sturdyAlways = new HashSet<>();
         private final Map<BlockPos, Set<Direction>> sturdyWhenOpen = new HashMap<>();
         private final Map<BlockPos, Set<Direction>> sturdyWhenClosed = new HashMap<>();
-        private final Map<BlockPos, Integer> controlInputs = new HashMap<>();
+        private PistonResult pistonResult = PistonResult.empty();
 
         FakeWorld set(BlockPos pos, BlockState state) {
             this.states.put(pos, state);
@@ -324,8 +377,8 @@ class EngineTest {
             return this;
         }
 
-        FakeWorld controlInput(BlockPos pos, int value) {
-            this.controlInputs.put(pos, value);
+        FakeWorld piston(PistonResult result) {
+            this.pistonResult = result;
             return this;
         }
 
@@ -355,11 +408,6 @@ class EngineTest {
         }
 
         @Override
-        public int controlInputSignal(BlockPos emitterPos, Direction dirFromReceiverToEmitter, boolean diodesOnly) {
-            return this.controlInputs.getOrDefault(emitterPos, 0);
-        }
-
-        @Override
         public BlockEntity blockEntity(BlockPos pos) {
             return null;
         }
@@ -371,7 +419,7 @@ class EngineTest {
 
         @Override
         public PistonResult pistonStructure(BlockPos pos, Direction facing, boolean extending) {
-            return PistonResult.empty();
+            return this.pistonResult;
         }
 
         @Override

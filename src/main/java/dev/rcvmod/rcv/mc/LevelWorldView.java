@@ -54,11 +54,6 @@ public final class LevelWorldView implements WorldView {
     }
 
     @Override
-    public int controlInputSignal(BlockPos emitterPos, Direction dirFromReceiverToEmitter, boolean diodesOnly) {
-        return this.level.getControlInputSignal(emitterPos, dirFromReceiverToEmitter, diodesOnly);
-    }
-
-    @Override
     public @Nullable BlockEntity blockEntity(BlockPos pos) {
         return this.level.getBlockEntity(pos);
     }

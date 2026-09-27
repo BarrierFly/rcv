@@ -6,13 +6,14 @@ import java.util.Locale;
  * The kinds of connections RCV can compute.
  *
  * <p>The enum order encodes the merge priority (see {@link #priority()}): when two edges share the
- * same {@code (from, to)} pair only the highest priority one is kept. {@link #CIRCUIT} and
- * {@link #COMPARATOR_SIDE} intentionally share priority 2.
+ * same {@code (from, to)} pair only the highest priority one is kept. {@link #CIRCUIT},
+ * {@link #COMPARATOR_SIDE} and {@link #REPEATER_SIDE} intentionally share priority 2.
  */
 public enum EdgeType {
     DIRECT_ACTIVATION(1, "direct_activation"),
     CIRCUIT(2, "circuit"),
     COMPARATOR_SIDE(2, "comparator_side"),
+    REPEATER_SIDE(2, "repeater_side"),
     ANALOG(3, "analog"),
     CHARGE(4, "charge"),
     HALF(5, "half"),

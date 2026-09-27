@@ -81,6 +81,7 @@ public final class RcvConfig {
                 case DIRECT_ACTIVATION -> 0xFFE69F00;
                 case CIRCUIT -> 0xFFFFA500;
                 case COMPARATOR_SIDE -> 0xFFFFB347;
+                case REPEATER_SIDE -> 0xFFFFD27F;
                 case ANALOG -> 0xFFCC79A7;
                 case CHARGE -> 0xFFF0E442;
                 case HALF -> 0xFFCC66FF;
@@ -98,6 +99,7 @@ public final class RcvConfig {
             case DIRECT_ACTIVATION -> 0xFFFF3B30;
             case CIRCUIT -> 0xFFFF9500;
             case COMPARATOR_SIDE -> 0xFFFFC04D;
+            case REPEATER_SIDE -> 0xFFFFDE85;
             case ANALOG -> 0xFFB45BFF;
             case CHARGE -> 0xFFFFE24D;
             case HALF -> 0xFFFF4DD2;

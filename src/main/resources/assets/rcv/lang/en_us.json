@@ -20,6 +20,7 @@
   "rcv.edge.direct_activation": "direct activation",
   "rcv.edge.circuit": "circuit",
   "rcv.edge.comparator_side": "comparator side",
+  "rcv.edge.repeater_side": "repeater lock",
   "rcv.edge.analog": "analog reading",
   "rcv.edge.charge": "charge",
   "rcv.edge.half": "quasi-connectivity",

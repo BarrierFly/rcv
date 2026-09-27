@@ -20,6 +20,7 @@ class CoreModelTest {
         assertTrue(EdgeType.DIRECT_ACTIVATION.priority() < EdgeType.CIRCUIT.priority());
         assertSame(EdgeType.NC, EdgeType.byId("nc"));
         assertSame(EdgeType.COMPARATOR_SIDE, EdgeType.byId("comparator_side"));
+        assertSame(EdgeType.REPEATER_SIDE, EdgeType.byId("repeater_side"));
         assertSame(EdgeType.RAIL, EdgeType.byId("rail"));
         assertSame(EdgeType.SHAPE, EdgeType.byId("shape"));
         assertSame(EdgeType.DISTANCE, EdgeType.byId("distance"));

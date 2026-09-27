@@ -30,12 +30,6 @@ public interface WorldView {
     /** Weak signal emitted by {@code emitter} into the neighbour located at {@code emitter.relative(dir)}. */
     int weakSignalTo(BlockPos emitter, Direction dirFromEmitterToReceiver);
 
-    /**
-     * Vanilla {@code SignalGetter.getControlInputSignal}, used for a comparator's side input: strong
-     * signal, with the redstone-block / redstone-wire special cases (§9).
-     */
-    int controlInputSignal(BlockPos emitterPos, Direction dirFromReceiverToEmitter, boolean diodesOnly);
-
     @Nullable BlockEntity blockEntity(BlockPos pos);
 
     List<ItemFrame> itemFrames(BlockPos pos, Direction face);

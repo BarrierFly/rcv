@@ -20,6 +20,7 @@
   "rcv.edge.direct_activation": "激活连接",
   "rcv.edge.circuit": "电路连接",
   "rcv.edge.comparator_side": "比较器侧输入",
+  "rcv.edge.repeater_side": "中继器锁定",
   "rcv.edge.analog": "模拟读数",
   "rcv.edge.charge": "充能连接",
   "rcv.edge.half": "半连接（QC）",

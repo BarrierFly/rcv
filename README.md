@@ -17,9 +17,13 @@ signal strength, nor detect faults.
 ## 功能 / Features
 
 - 13 类连接 / 13 connection types:
-  激活 `direct_activation`、电路 `circuit`（含比较器侧输入 `comparator_side`）、模拟读数 `analog`、
-  充能 `charge`、半连接 / QC `half`、绊线 `tripwire`、活塞 `piston`、门两半 `door_pair`、
-  轨道 `rail`、形状 `shape`、距离 `distance`、NC 更新 `nc`、PP 更新 `pp`。
+  激活 `direct_activation`、电路 `circuit`（含比较器侧输入 `comparator_side` 与中继器锁定
+  `repeater_side`）、模拟读数 `analog`、充能 `charge`、半连接 / QC `half`、绊线 `tripwire`、
+  活塞 `piston`、门两半 `door_pair`、轨道 `rail`、形状 `shape`、距离 `distance`、NC 更新 `nc`、
+  PP 更新 `pp`。
+- **侧输入按拓扑判定**：比较器 `comparator_side` 连接所有可提供控制输入的强信号源
+  （红石块 / 红石线 / 火把 / 拉杆 / 按钮 / 二极管 / 侦测器），不依赖当前信号或朝向；
+  中继器 `repeater_side` 只连输出朝向它的二极管（原版 `sideInputDiodesOnly()`）。
 - 单次请求计算可达子图，带深度、区域裁剪、节点 / 边上限，结果稳定排序。
 - 世界空间线框叠加：节点立方体、边线、箭头、via 菱形路径；按类型配色，深度越深越淡。
 - 魔杖取点与区域选区（默认紫色染料）。
@@ -36,8 +40,14 @@ signal strength, nor detect faults.
   上方墙 → 下方墙（`UP` 与手臂高度依赖上方墙的 `DOWN` 遮盖）。静态连接（栅栏↔栅栏、
   铁栏杆↔墙、满方块面支撑、钟、朝向对齐、水平墙↔墙）不显示。
 - **距离 `distance`**：树叶之间双向；脚手架水平双向；下方支撑块 → 上方脚手架（有向，
-  门/活板门即使当前 `open`、只要翻转会改变支撑也算）。
+  门/活板门即使当前 `open`、只要翻转会改变支撑也算）。栅栏门不参与：其 `getBlockSupportShape`
+  不是完整面，`isFaceSturdy(UP)` 恒为假，无法支撑脚手架。
 - **PP 默认档 = 仅侦测器 `observer_only`**：只显示侦测器侦测其正前方方块；可在配置中改为 `all`。
+- **NC 信号变化范围**：红石线按“信号变化”路径取 7 个核（线自身 + 其 6 邻）各自的 6 邻，
+  共至多 42 点（重复已合并）；放置 / 破坏时的相邻线 6 邻属另一条路径，不在此列。
+- **活塞绑定块**：NC `all` / PP `all` 档下，`PistonStructureResolver` 的 `toPush` / `toDestroy`
+  方块在活塞动作时也作为 NC + PP 源（各自 6 邻，外加红石线的间接形状更新与伸出时的活塞头位置），
+  此来源**反向（IN）搜索不保证可查**（边由活塞位置生成、源为被移方块，见“已知限制”）。
 
 ## 命令 / Commands
 
@@ -99,6 +109,10 @@ Windows PowerShell 使用 `.\gradlew.bat`。产物：`build/libs/rcv-mc<version>
 - **26.3** 尚未实现 HUD 图例（新 HUD 使用 `GuiGraphicsExtractor` 抽取式 API）；渲染与命令正常。
 - `compat` 复刻的红石线 / 中继器 / 比较器判定需与逐版本真实行为做游戏内对照（规划附录 D3）。
 - PP `all` 档、NC `all` 档可能产生大量边，受节点 / 边上限保护。
+- 活塞绑定块的 NC / PP 边由活塞方生成，**反向（IN）搜索不保证可查**（差异仅在有活塞源、
+  且其落在 `incoming` 的 ±2 扫描内时才会被顺带命中）。
+- 同一 `(from,to)` 只保留优先级最高的一条边，因此 NC 会盖住同对的 PP（需用 `--no-nc`
+  单独查看 PP）；比较器 / 中继器侧输入也遵循此合并规则。
 
 ## 配置 / Config
 

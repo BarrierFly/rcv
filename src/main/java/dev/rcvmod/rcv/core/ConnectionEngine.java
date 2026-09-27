@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -168,10 +169,21 @@ public final class ConnectionEngine {
                 if (f != null) {
                     if (k == f.getOpposite() && (emits || ComponentCatalog.isWire(state)) && emitsToward(pos, state, k)) {
                         this.add(result, pos, r, EdgeType.CIRCUIT, true, null, null, f, null);
-                    } else if (ComponentCatalog.isComparator(rs) && (k == f.getClockWise() || k == f.getCounterClockWise())
-                            && this.world.controlInputSignal(pos, k.getOpposite(), false) > 0) {
-                        String port = k == f.getClockWise() ? "SIDE_L" : "SIDE_R";
-                        this.add(result, pos, r, EdgeType.COMPARATOR_SIDE, true, null, null, f, port);
+                    } else if (k == f.getClockWise() || k == f.getCounterClockWise()) {
+                        // Topology-only side input: connect anything that can feed a control input.
+                        // Comparator: every strong-signal source (redstone block / wire / torch /
+                        // lever / button / diode / observer), regardless of current signal or facing.
+                        // Repeater: vanilla sideInputDiodesOnly()==true, so only a diode whose output
+                        // points at the repeater's side locks it.
+                        if (ComponentCatalog.isComparator(rs) && (emits || ComponentCatalog.isWire(state))) {
+                            String port = k == f.getClockWise() ? "SIDE_L" : "SIDE_R";
+                            this.add(result, pos, r, EdgeType.COMPARATOR_SIDE, true, null, null, f, port);
+                        } else if (ComponentCatalog.isRepeater(rs) && ComponentCatalog.isDiode(state)
+                                && ComponentCatalog.inputFacing(state) != null
+                                && ComponentCatalog.inputFacing(state).getOpposite() == k) {
+                            String port = k == f.getClockWise() ? "SIDE_L" : "SIDE_R";
+                            this.add(result, pos, r, EdgeType.REPEATER_SIDE, true, null, null, f, port);
+                        }
                     }
                 }
                 continue;
@@ -294,8 +306,8 @@ public final class ConnectionEngine {
         if (ComponentCatalog.isPiston(state)) {
             Direction f = ComponentCatalog.inputFacing(state);
             if (f != null) {
-                boolean extended = state.getValue(PistonBaseBlock.EXTENDED);
-                PistonResult pr = this.world.pistonStructure(pos, f, !extended);
+                boolean extending = !state.getValue(PistonBaseBlock.EXTENDED);
+                PistonResult pr = this.world.pistonStructure(pos, f, extending);
                 if (pr.resolved()) {
                     for (BlockPos p : pr.toPush()) {
                         this.add(result, pos, p, EdgeType.PISTON, true, null, NodeKind.MOVED, f, null);
@@ -303,6 +315,7 @@ public final class ConnectionEngine {
                     for (BlockPos p : pr.toDestroy()) {
                         this.add(result, pos, p, EdgeType.PISTON, true, null, NodeKind.MOVED, f, null);
                     }
+                    this.addPistonUpdates(pos.relative(f), pr, extending, result);
                 }
             }
         }
@@ -489,21 +502,28 @@ public final class ConnectionEngine {
                 this.add(result, pos, r, EdgeType.PP, true, null, null, k, null);
             }
         }
-        if (ComponentCatalog.isWire(state)) {
-            // Mirrors RedStoneWireBlock.updateIndirectNeighbourShapes (§11.2): a wire that points at a
-            // non-wire neighbour makes the wire diagonally above/below that neighbour re-evaluate its
-            // shape, because the wire directly above/below this one may now connect to it.
-            for (Direction k : Direction.Plane.HORIZONTAL) {
-                BlockPos side = pos.relative(k);
-                if (!this.world.isLoaded(side) || ComponentCatalog.isWire(this.world.state(side))
-                        || !wireEmitsToward(pos, k)) {
-                    continue;
-                }
-                for (Direction vertical : new Direction[]{Direction.DOWN, Direction.UP}) {
-                    BlockPos diagonal = side.relative(vertical);
-                    if (this.world.isLoaded(diagonal) && ComponentCatalog.isWire(this.world.state(diagonal))) {
-                        this.add(result, pos, diagonal, EdgeType.PP, true, null, null, vertical, null);
-                    }
+        addWireIndirectPp(pos, state, result);
+    }
+
+    /**
+     * Mirrors {@code RedStoneWireBlock.updateIndirectNeighbourShapes} (§11.2): a wire that points at a
+     * non-wire neighbour makes the wire diagonally above/below that neighbour re-evaluate its shape,
+     * because the wire directly above/below this one may now connect to it.
+     */
+    private void addWireIndirectPp(BlockPos pos, BlockState state, List<Candidate> result) {
+        if (!ComponentCatalog.isWire(state)) {
+            return;
+        }
+        for (Direction k : Direction.Plane.HORIZONTAL) {
+            BlockPos side = pos.relative(k);
+            if (!this.world.isLoaded(side) || ComponentCatalog.isWire(this.world.state(side))
+                    || !wireEmitsToward(pos, k)) {
+                continue;
+            }
+            for (Direction vertical : new Direction[]{Direction.DOWN, Direction.UP}) {
+                BlockPos diagonal = side.relative(vertical);
+                if (this.world.isLoaded(diagonal) && ComponentCatalog.isWire(this.world.state(diagonal))) {
+                    this.add(result, pos, diagonal, EdgeType.PP, true, null, null, vertical, null);
                 }
             }
         }
@@ -513,7 +533,9 @@ public final class ConnectionEngine {
      * Neighbour update (NC) coverage (§10). Only blocks whose redstone signal/power actually changes
      * emit NC; the target set mirrors the vanilla call sites:
      * <ul>
-     *   <li>wire: own 6 neighbours plus the {@code checkCornerChangeAt} corner wires' neighbours;</li>
+     *   <li>wire: the 7 cores {@code pos} + its 6 neighbours, each updating its own 6 neighbours
+     *       (42 targets, duplicates collapsed) - this is the signal-change path in
+     *       {@code DefaultRedstoneWireEvaluator.updatePowerStrength};</li>
      *   <li>repeater/comparator/observer: the output block and its 5 neighbours (skipping the
      *       source, {@code updateNeighborsInFront});</li>
      *   <li>lever/button: own 6 neighbours plus the support block's 6 neighbours;</li>
@@ -528,26 +550,8 @@ public final class ConnectionEngine {
         Set<BlockPos> targets = new HashSet<>();
         if (ComponentCatalog.isWire(state)) {
             addNeighbors(pos, targets);
-            // RedStoneWireBlock.updateNeighborsOfNeighboringWires -> checkCornerChangeAt: each
-            // horizontally adjacent wire also updates its own neighbours, and a wire diagonally
-            // above/below a side block is reached across that support. Only the first hop from the
-            // corner is modelled; the vanilla second hop can exceed the ±2 incoming scan, which would
-            // break IN/OUT symmetry.
-            for (Direction k : Direction.Plane.HORIZONTAL) {
-                BlockPos adjacent = pos.relative(k);
-                if (this.world.isLoaded(adjacent) && ComponentCatalog.isWire(this.world.state(adjacent))) {
-                    addNeighbors(adjacent, targets);
-                }
-            }
-            for (Direction k : Direction.Plane.HORIZONTAL) {
-                BlockPos side = pos.relative(k);
-                if (!this.world.isLoaded(side)) {
-                    continue;
-                }
-                BlockPos corner = this.world.isConductor(side) ? side.above() : side.below();
-                if (this.world.isLoaded(corner) && ComponentCatalog.isWire(this.world.state(corner))) {
-                    addNeighbors(corner, targets);
-                }
+            for (Direction k : Direction.values()) {
+                addNeighbors(pos.relative(k), targets);
             }
         } else if (ComponentCatalog.isDiode(state) || ComponentCatalog.isObserver(state)) {
             Direction f = ComponentCatalog.inputFacing(state);
@@ -585,6 +589,53 @@ public final class ConnectionEngine {
         }
         for (Direction d : Direction.values()) {
             targets.add(center.relative(d));
+        }
+    }
+
+    /**
+     * Blocks bound through a piston ({@code PistonStructureResolver.toPush/toDestroy}) act as NC and
+     * PP sources while the piston moves (§10.2): each one updates its 6 neighbours in both channels,
+     * plus the wire indirect shape update where applicable and the head-block NC when extending. The
+     * outer piston edge is emitted by the caller, so this only adds the moved blocks' own updates.
+     *
+     * <p>These candidates originate from the moved block rather than the piston, so {@code incoming}
+     * will not find them unless the piston happens to sit within its ±2 scan. That asymmetry is
+     * intentionally accepted here (documented in README).
+     */
+    private void addPistonUpdates(BlockPos headPos, PistonResult pr, boolean extending, List<Candidate> result) {
+        boolean nc = this.options.ncMode == NcMode.ALL && this.options.allows(EdgeType.NC);
+        boolean pp = this.options.ppMode == PpMode.ALL && this.options.allows(EdgeType.PP);
+        if (!nc && !pp) {
+            return;
+        }
+        Set<BlockPos> sources = new LinkedHashSet<>(pr.toPush());
+        sources.addAll(pr.toDestroy());
+        for (BlockPos moved : sources) {
+            if (!this.world.isLoaded(moved)) {
+                continue;
+            }
+            if (nc) {
+                addBoundNeighbors(moved, EdgeType.NC, result);
+            }
+            if (pp) {
+                addBoundNeighbors(moved, EdgeType.PP, result);
+                addWireIndirectPp(moved, this.world.state(moved), result);
+            }
+        }
+        if (extending && nc && this.world.isLoaded(headPos)) {
+            addBoundNeighbors(headPos, EdgeType.NC, result);
+        }
+    }
+
+    private void addBoundNeighbors(BlockPos source, EdgeType type, List<Candidate> result) {
+        for (Direction d : Direction.values()) {
+            BlockPos target = source.relative(d);
+            if (!this.world.isLoaded(target)) {
+                continue;
+            }
+            if (ComponentCatalog.isResponsive(this.world.state(target))) {
+                this.add(result, source, target, type, true, null, null, null, null);
+            }
         }
     }
 
