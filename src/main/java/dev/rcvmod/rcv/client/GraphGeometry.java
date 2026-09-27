@@ -39,6 +39,34 @@ public final class GraphGeometry {
         return segments;
     }
 
+    /**
+     * Expands a segment into a camera-facing ribbon so lines can be drawn as quads and their width
+     * does not depend on the GL line renderer (which fixes the width to ~2.5px on 1.21.1/1.21.10).
+     *
+     * <p>Returns the four corners relative to {@code camera} in triangle-strip order
+     * {@code (a-, a+, b-, b+)}. {@code tanHalfFovOverHeight} converts one pixel at distance 1 to
+     * world units, so the on-screen thickness stays constant regardless of distance.
+     */
+    public static List<Vec3> ribbon(Segment s, Vec3 camera, double tanHalfFovOverHeight) {
+        Vec3 a = s.a().subtract(camera);
+        Vec3 b = s.b().subtract(camera);
+        Vec3 dir = b.subtract(a);
+        if (dir.lengthSqr() < 1.0E-9) {
+            return List.of();
+        }
+        dir = dir.normalize();
+        Vec3 mid = a.add(b).scale(0.5);
+        Vec3 toCamera = mid.scale(-1.0);
+        Vec3 side = dir.cross(toCamera);
+        if (side.lengthSqr() < 1.0E-9) {
+            Vec3 reference = Math.abs(dir.y) > 0.9 ? new Vec3(1.0, 0.0, 0.0) : new Vec3(0.0, 1.0, 0.0);
+            side = dir.cross(reference);
+        }
+        double halfWidth = s.width() * mid.length() * tanHalfFovOverHeight;
+        side = side.normalize().scale(halfWidth);
+        return List.of(a.subtract(side), a.add(side), b.subtract(side), b.add(side));
+    }
+
     private static void appendNode(List<Segment> segments, GraphNode node, RcvConfig config) {
         double cx = node.pos.getX() + 0.5;
         double cy = node.pos.getY() + 0.5;

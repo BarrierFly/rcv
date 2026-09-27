@@ -1,12 +1,12 @@
 package dev.rcvmod.rcv.version;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.rcvmod.rcv.client.GraphGeometry;
 import dev.rcvmod.rcv.client.RcvClientState;
 import dev.rcvmod.rcv.config.RcvConfig;
 import dev.rcvmod.rcv.core.ConnectionGraph;
+import java.util.List;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.Minecraft;
@@ -38,25 +38,32 @@ public final class RenderCompat {
             return;
         }
         Vec3 camera = context.camera().getPosition();
-        VertexConsumer consumer = consumers.getBuffer(RenderType.lines());
+        double scale = tanHalfFovOverHeight(minecraft);
+        // Quads instead of RenderType.lines(): the vanilla line render type overrides the line width
+        // with max(2.5, windowWidth / 1920 * 2.5) in setupRenderState, so the config value never
+        // reaches the shader on 1.21.1.
+        VertexConsumer consumer = consumers.getBuffer(RenderType.debugFilledBox());
         PoseStack.Pose pose = poseStack.last();
         for (GraphGeometry.Segment segment : GraphGeometry.build(graph, RcvConfig.get())) {
-            emit(consumer, pose, camera, segment);
+            emit(consumer, pose, camera, scale, segment);
         }
     }
 
-    private static void emit(VertexConsumer consumer, PoseStack.Pose pose, Vec3 camera, GraphGeometry.Segment s) {
-        float ax = (float) (s.a().x - camera.x);
-        float ay = (float) (s.a().y - camera.y);
-        float az = (float) (s.a().z - camera.z);
-        float bx = (float) (s.b().x - camera.x);
-        float by = (float) (s.b().y - camera.y);
-        float bz = (float) (s.b().z - camera.z);
-        float nx = bx - ax;
-        float ny = by - ay;
-        float nz = bz - az;
-        RenderSystem.lineWidth(s.width());
-        consumer.addVertex(pose, ax, ay, az).setNormal(pose, nx, ny, nz).setColor(s.color());
-        consumer.addVertex(pose, bx, by, bz).setNormal(pose, nx, ny, nz).setColor(s.color());
+    private static void emit(VertexConsumer consumer, PoseStack.Pose pose, Vec3 camera, double scale,
+                             GraphGeometry.Segment s) {
+        List<Vec3> quad = GraphGeometry.ribbon(s, camera, scale);
+        if (quad.size() < 4) {
+            return;
+        }
+        // Triangle strip (debugFilledBox is TRIANGLE_STRIP): a-, a+, b-, b+.
+        for (Vec3 v : quad) {
+            consumer.addVertex(pose, (float) v.x, (float) v.y, (float) v.z).setColor(s.color());
+        }
+    }
+
+    private static double tanHalfFovOverHeight(Minecraft minecraft) {
+        double halfFov = Math.toRadians(minecraft.options.fov().get() * 0.5);
+        int height = Math.max(1, minecraft.getWindow().getHeight());
+        return Math.tan(halfFov) / height;
     }
 }
