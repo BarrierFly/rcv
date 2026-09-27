@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.TripWireHookBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.RailShape;
 import net.minecraft.world.level.block.state.properties.RedstoneSide;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -250,6 +251,35 @@ class EngineTest {
     }
 
     @Test
+    void poweredRailNcCoversBelowAndSlopeAbove() {
+        BlockPos rail = new BlockPos(0, 0, 0);
+        BlockPos belowTarget = new BlockPos(0, -2, 0);
+        BlockPos aboveTarget = new BlockPos(0, 2, 0);
+        FakeWorld world = new FakeWorld()
+                .set(rail, Blocks.POWERED_RAIL.defaultBlockState()
+                        .setValue(BlockStateProperties.RAIL_SHAPE_STRAIGHT, RailShape.ASCENDING_EAST))
+                .set(belowTarget, Blocks.OAK_FENCE.defaultBlockState())
+                .set(aboveTarget, Blocks.OAK_FENCE.defaultBlockState());
+
+        ConnectionGraph graph = compute(world, rail, QueryMode.OUT, PpMode.OFF, NcMode.ALL);
+        assertTrue(hasEdge(graph, EdgeType.NC, rail, belowTarget));
+        assertTrue(hasEdge(graph, EdgeType.NC, rail, aboveTarget));
+    }
+
+    @Test
+    void detectorRailNcNotifiesConnectedRail() {
+        BlockPos detector = new BlockPos(0, 0, 0);
+        BlockPos connected = new BlockPos(1, 0, 0);
+        FakeWorld world = new FakeWorld()
+                .set(detector, Blocks.DETECTOR_RAIL.defaultBlockState())
+                .set(connected, Blocks.RAIL.defaultBlockState())
+                .railConnections(detector, List.of(connected));
+
+        assertTrue(hasEdge(compute(world, detector, QueryMode.OUT, PpMode.OFF, NcMode.ALL),
+                EdgeType.NC, detector, connected));
+    }
+
+    @Test
     void repeaterSideInputOnlyFromDiodeFacingIt() {
         BlockPos repeater = new BlockPos(0, 0, 0);
         BlockPos side = new BlockPos(1, 0, 0);
@@ -350,6 +380,7 @@ class EngineTest {
         private final Set<BlockPos> sturdyAlways = new HashSet<>();
         private final Map<BlockPos, Set<Direction>> sturdyWhenOpen = new HashMap<>();
         private final Map<BlockPos, Set<Direction>> sturdyWhenClosed = new HashMap<>();
+        private final Map<BlockPos, List<BlockPos>> railConnections = new HashMap<>();
         private PistonResult pistonResult = PistonResult.empty();
 
         FakeWorld set(BlockPos pos, BlockState state) {
@@ -379,6 +410,11 @@ class EngineTest {
 
         FakeWorld piston(PistonResult result) {
             this.pistonResult = result;
+            return this;
+        }
+
+        FakeWorld railConnections(BlockPos pos, List<BlockPos> connections) {
+            this.railConnections.put(pos, connections);
             return this;
         }
 
@@ -424,7 +460,7 @@ class EngineTest {
 
         @Override
         public List<BlockPos> railConnections(BlockPos railPos) {
-            return List.of();
+            return this.railConnections.getOrDefault(railPos, List.of());
         }
 
         @Override

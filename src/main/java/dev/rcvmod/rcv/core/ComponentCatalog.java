@@ -217,7 +217,8 @@ public final class ComponentCatalog {
      */
     public static boolean emitsNc(BlockState state) {
         return isWire(state) || isDiode(state) || isObserver(state) || isRedstoneTorch(state)
-                || isLever(state) || isButton(state) || isNoteBlock(state) || isScaffolding(state);
+                || isLever(state) || isButton(state) || isNoteBlock(state) || isScaffolding(state)
+                || isPoweredRail(state) || isDetectorRail(state);
     }
 
     /** Direction from a lever/button towards the block it is attached to, or {@code null}. */

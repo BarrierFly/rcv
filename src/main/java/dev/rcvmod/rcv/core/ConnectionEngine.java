@@ -17,6 +17,7 @@ import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.ObserverBlock;
+import net.minecraft.world.level.block.PoweredRailBlock;
 import net.minecraft.world.level.block.RepeaterBlock;
 import net.minecraft.world.level.block.RedstoneWallTorchBlock;
 import net.minecraft.world.level.block.TripWireHookBlock;
@@ -25,6 +26,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.block.state.properties.RailShape;
 import net.minecraft.world.level.block.state.properties.RedstoneSide;
 import net.minecraft.world.level.block.state.properties.WallSide;
 import org.jetbrains.annotations.Nullable;
@@ -538,6 +540,10 @@ public final class ConnectionEngine {
      *       {@code DefaultRedstoneWireEvaluator.updatePowerStrength};</li>
      *   <li>repeater/comparator/observer: the output block and its 5 neighbours (skipping the
      *       source, {@code updateNeighborsInFront});</li>
+     *   <li>powered/activator rail: own 6 neighbours plus the block below, and the block above on a
+     *       slope ({@code PoweredRailBlock.updateState});</li>
+     *   <li>detector rail: own 6 neighbours plus the block below, plus each connected rail
+     *       ({@code DetectorRailBlock.checkPressed} / {@code updatePowerToConnected});</li>
      *   <li>lever/button: own 6 neighbours plus the support block's 6 neighbours;</li>
      *   <li>redstone torch/note block/scaffolding: own 6 neighbours.</li>
      * </ul>
@@ -563,6 +569,23 @@ public final class ConnectionEngine {
                         targets.add(front.relative(d));
                     }
                 }
+            }
+        } else if (ComponentCatalog.isPoweredRail(state)) {
+            // PoweredRailBlock.updateState: setBlock(..., 3) updates pos' neighbours, then the
+            // supporting block below, and the block above as well when the rail is on a slope.
+            addNeighbors(pos, targets);
+            addNeighbors(pos.below(), targets);
+            // RailShape.isSlope() only exists from 1.21.10; test the ascending constants instead.
+            if (state.hasProperty(PoweredRailBlock.SHAPE) && isSlope(state.getValue(PoweredRailBlock.SHAPE))) {
+                addNeighbors(pos.above(), targets);
+            }
+        } else if (ComponentCatalog.isDetectorRail(state)) {
+            // DetectorRailBlock.checkPressed: 6 neighbours of pos and of the block below, plus a direct
+            // neighbourChanged on every rail this one connects to (updatePowerToConnected).
+            addNeighbors(pos, targets);
+            addNeighbors(pos.below(), targets);
+            for (BlockPos connection : this.world.railConnections(pos)) {
+                targets.add(connection);
             }
         } else if (ComponentCatalog.isLever(state) || ComponentCatalog.isButton(state)) {
             addNeighbors(pos, targets);
@@ -700,6 +723,11 @@ public final class ConnectionEngine {
 
     private static boolean isFenceBarsWall(BlockState state) {
         return ComponentCatalog.isFence(state) || ComponentCatalog.isIronBars(state) || ComponentCatalog.isWall(state);
+    }
+
+    private static boolean isSlope(RailShape shape) {
+        return shape == RailShape.ASCENDING_EAST || shape == RailShape.ASCENDING_WEST
+                || shape == RailShape.ASCENDING_NORTH || shape == RailShape.ASCENDING_SOUTH;
     }
 
     private List<BlockPos> railChain(BlockPos start, int max) {
