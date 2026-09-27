@@ -16,12 +16,19 @@
     ],
     "client": [
       "dev.rcvmod.rcv.client.RcvClient"
+    ],
+    "modmenu": [
+      "dev.rcvmod.rcv.client.RcvModMenu"
     ]
   },
   "depends": {
     "fabricloader": ">=0.19.0",
-    "minecraft": "~1.21.11",
+    "minecraft": "[1.21.1,1.22)",
     "java": ">=21",
     "fabric-api": "*"
+  },
+  "recommends": {
+    "cloth-config": "*",
+    "modmenu": "*"
   }
 }

@@ -15,6 +15,7 @@ import dev.rcvmod.rcv.core.Region;
 import dev.rcvmod.rcv.core.TypeMask;
 import dev.rcvmod.rcv.mc.LevelWorldView;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.minecraft.client.Minecraft;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
@@ -49,6 +50,15 @@ public final class RcvClientCommand {
                         .then(ClientCommandManager.literal("types").executes(ctx -> {
                             ctx.getSource().sendFeedback(Component.translatable("rcv.types.header"));
                             ctx.getSource().sendFeedback(RcvCommandUtil.typeList());
+                            return 1;
+                        }))
+                        .then(ClientCommandManager.literal("config").executes(ctx -> {
+                            if (!net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("cloth-config")) {
+                                ctx.getSource().sendError(Component.literal(
+                                        "RCV: Cloth Config is required for the config GUI"));
+                                return 0;
+                            }
+                            Minecraft.getInstance().setScreen(RcvConfigScreen.create(null));
                             return 1;
                         }))
                         .then(ClientCommandManager.literal("mode")
