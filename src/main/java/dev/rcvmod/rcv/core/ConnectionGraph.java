@@ -14,6 +14,8 @@ public final class ConnectionGraph {
     private final List<GraphNode> nodes = new ArrayList<>();
     private final List<GraphEdge> edges = new ArrayList<>();
     private final Map<Long, Integer> posIndex = new HashMap<>();
+    /** Stable id -> node lookup; the {@link #nodes} list is reordered for rendering, so ids are not indices. */
+    private final Map<Integer, GraphNode> byId = new HashMap<>();
 
     private final QueryMode mode;
     private Region region;
@@ -69,7 +71,7 @@ public final class ConnectionGraph {
     }
 
     public GraphNode node(int id) {
-        return id >= 0 && id < this.nodes.size() ? this.nodes.get(id) : null;
+        return this.byId.get(id);
     }
 
     public int idOf(BlockPos pos) {
@@ -92,14 +94,17 @@ public final class ConnectionGraph {
             int mergedDepth = Math.min(existing.depth, depth);
             if (mergedKind != existing.kind || mergedRoles.size() != existing.roles().size()
                     || mergedDepth != existing.depth) {
-                this.nodes.set(existingId, new GraphNode(existing.id, existing.pos, blockId, mergedKind, mergedRoles,
-                        mergedDepth, existing.origin));
+                GraphNode updated = new GraphNode(existing.id, existing.pos, blockId, mergedKind, mergedRoles,
+                        mergedDepth, existing.origin);
+                this.nodes.set(existingId, updated);
+                this.byId.put(existingId, updated);
             }
             return existingId;
         }
         int id = this.nodes.size();
         GraphNode node = new GraphNode(id, pos, blockId, kind, roles, depth, false);
         this.nodes.add(node);
+        this.byId.put(id, node);
         this.posIndex.put(key, id);
         return id;
     }
@@ -121,8 +126,13 @@ public final class ConnectionGraph {
     }
 
     public void setOrigin(int id) {
-        GraphNode node = this.nodes.get(id);
-        this.nodes.set(id, new GraphNode(node.id, node.pos, node.blockId, node.kind, node.roles(), node.depth, true));
+        GraphNode node = this.byId.get(id);
+        if (node == null) {
+            return;
+        }
+        GraphNode updated = new GraphNode(node.id, node.pos, node.blockId, node.kind, node.roles(), node.depth, true);
+        this.byId.put(id, updated);
+        this.nodes.set(this.nodes.indexOf(node), updated);
         this.originId = id;
     }
 

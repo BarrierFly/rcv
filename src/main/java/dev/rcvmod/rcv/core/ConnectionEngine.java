@@ -195,17 +195,27 @@ public final class ConnectionEngine {
             }
         }
 
-        // Wire climbing: a wire connects diagonally up to a wire sitting on top of a solid block.
+        // Wire climbing: a wire connects diagonally to a wire on top of an adjacent solid block.
+        // Uphill requires this wire to be uncovered; downhill requires this wire to sit on a solid block.
         if (ComponentCatalog.isWire(state)) {
+            boolean uncovered = !this.world.isConductor(pos.above());
+            BlockPos base = pos.below();
+            boolean supported = this.world.isLoaded(base) && this.world.isFaceSturdy(base, Direction.UP);
             for (Direction k : Direction.Plane.HORIZONTAL) {
                 BlockPos mid = pos.relative(k);
-                BlockPos up = mid.above();
-                if (!this.world.isLoaded(mid) || !this.world.isLoaded(up)) {
+                if (!this.world.isLoaded(mid)) {
                     continue;
                 }
-                if (this.world.isFaceSturdy(mid, Direction.UP)
+                BlockPos up = mid.above();
+                if (uncovered && this.world.isLoaded(up) && this.world.isFaceSturdy(mid, Direction.UP)
                         && ComponentCatalog.isWire(this.world.state(up))) {
                     this.addUndirected(result, pos, up, EdgeType.CIRCUIT, null, k);
+                }
+                if (supported) {
+                    BlockPos down = base.relative(k);
+                    if (this.world.isLoaded(down) && ComponentCatalog.isWire(this.world.state(down))) {
+                        this.addUndirected(result, pos, down, EdgeType.CIRCUIT, null, k);
+                    }
                 }
             }
         }
@@ -244,16 +254,20 @@ public final class ConnectionEngine {
             }
         }
 
-        // CHARGE: strongly charge a conductor, which then powers neighbouring components.
+        // CHARGE: a source/transmitter charges an adjacent conductor (weakly or strongly); a strongly
+        // charged conductor then powers neighbouring components through itself (via).
         for (Direction k : Direction.values()) {
             BlockPos c = pos.relative(k);
             if (!this.world.isLoaded(c) || !this.world.isConductor(c)) {
                 continue;
             }
-            if (!stronglyPowers(state, k)) {
+            if (!emits || !emitsToward(pos, state, k)) {
                 continue;
             }
             this.add(result, pos, c, EdgeType.CHARGE, true, null, null, k, null);
+            if (!stronglyPowers(state, k)) {
+                continue;
+            }
             for (Direction m : Direction.values()) {
                 if (m == k.getOpposite()) {
                     continue;
@@ -380,11 +394,18 @@ public final class ConnectionEngine {
      * block above it, and both halves of a door are activated by a signal near the other half.
      */
     private void addHalf(BlockPos pos, BlockState state, List<Candidate> result) {
-        if (!this.options.allows(EdgeType.HALF) || !state.isSignalSource()) {
+        if (!this.options.allows(EdgeType.HALF)) {
+            return;
+        }
+        boolean emitter = state.isSignalSource();
+        // A strongly charged conductor also powers the QC space (vanilla getSignal includes strong charge).
+        boolean conductor = !emitter && this.world.isConductor(pos);
+        if (!emitter && !conductor) {
             return;
         }
         for (Direction k : Direction.values()) {
-            if (!emitsToward(pos, state, k)) {
+            boolean powers = emitter ? emitsToward(pos, state, k) : this.world.weakSignalTo(pos, k) > 0;
+            if (!powers) {
                 continue;
             }
             BlockPos space = pos.relative(k);
