@@ -21,7 +21,10 @@ import net.minecraft.world.level.block.RepeaterBlock;
 import net.minecraft.world.level.block.RedstoneWallTorchBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.block.state.properties.RedstoneSide;
 import net.minecraft.world.level.block.state.properties.WallSide;
 import org.jetbrains.annotations.Nullable;
 
@@ -153,7 +156,7 @@ public final class ConnectionEngine {
                     if (k.getAxis() != Direction.Axis.Y) {
                         this.addUndirected(result, pos, r, EdgeType.CIRCUIT, null, dirRtoA);
                     }
-                } else if (wireAccepts(state, dirRtoA) && emitsToward(state, k)) {
+                } else if (wireAccepts(state, dirRtoA) && emitsToward(pos, state, k)) {
                     this.add(result, pos, r, EdgeType.CIRCUIT, true, null, null, dirRtoA, null);
                 }
                 continue;
@@ -162,10 +165,10 @@ public final class ConnectionEngine {
             if (ComponentCatalog.isDiode(rs)) {
                 Direction f = ComponentCatalog.inputFacing(rs);
                 if (f != null) {
-                    if (k == f.getOpposite() && (emits || ComponentCatalog.isWire(state)) && emitsToward(state, k)) {
+                    if (k == f.getOpposite() && (emits || ComponentCatalog.isWire(state)) && emitsToward(pos, state, k)) {
                         this.add(result, pos, r, EdgeType.CIRCUIT, true, null, null, f, null);
                     } else if (ComponentCatalog.isComparator(rs) && (k == f.getClockWise() || k == f.getCounterClockWise())
-                            && (emits || ComponentCatalog.isWire(state)) && emitsToward(state, k)) {
+                            && (emits || ComponentCatalog.isWire(state)) && emitsToward(pos, state, k)) {
                         String port = k == f.getClockWise() ? "SIDE_L" : "SIDE_R";
                         this.add(result, pos, r, EdgeType.COMPARATOR_SIDE, true, null, null, f, port);
                     }
@@ -174,13 +177,20 @@ public final class ConnectionEngine {
             }
 
             if (ComponentCatalog.isPoweredRail(rs)) {
-                if (emits && emitsToward(state, k)) {
+                if (emits && emitsToward(pos, state, k)) {
                     this.add(result, pos, r, EdgeType.RAIL, true, null, null, k, null);
                 }
                 continue;
             }
 
-            if (emits && emitsToward(state, k) && ComponentCatalog.isConsumer(rs)) {
+            if (emits && emitsToward(pos, state, k) && ComponentCatalog.isConsumer(rs)) {
+                if (ComponentCatalog.isPiston(rs)) {
+                    Direction f = ComponentCatalog.inputFacing(rs);
+                    if (f != null && k == f.getOpposite()) {
+                        // Pistons ignore the neighbour in their facing direction (that side is the head).
+                        continue;
+                    }
+                }
                 this.add(result, pos, r, EdgeType.DIRECT_ACTIVATION, true, null, null, k, null);
             }
         }
@@ -240,7 +250,7 @@ public final class ConnectionEngine {
             if (!this.world.isLoaded(c) || !this.world.isConductor(c)) {
                 continue;
             }
-            if (!stronglyPowers(pos, k, state)) {
+            if (!stronglyPowers(state, k)) {
                 continue;
             }
             this.add(result, pos, c, EdgeType.CHARGE, true, null, null, k, null);
@@ -341,6 +351,9 @@ public final class ConnectionEngine {
             }
         }
 
+        // HALF (quasi-connectivity).
+        this.addHalf(pos, state, result);
+
         // NC.
         if (this.options.ncMode == NcMode.ALL && ComponentCatalog.canChangeState(state)
                 && this.options.allows(EdgeType.NC)) {
@@ -360,6 +373,42 @@ public final class ConnectionEngine {
 
         this.outgoingCache.put(pos, result);
         return result;
+    }
+
+    /**
+     * Quasi-connectivity (§6.5): a piston/dispenser is also activated by a signal that powers the
+     * block above it, and both halves of a door are activated by a signal near the other half.
+     */
+    private void addHalf(BlockPos pos, BlockState state, List<Candidate> result) {
+        if (!this.options.allows(EdgeType.HALF) || !state.isSignalSource()) {
+            return;
+        }
+        for (Direction k : Direction.values()) {
+            if (!emitsToward(pos, state, k)) {
+                continue;
+            }
+            BlockPos space = pos.relative(k);
+            if (!this.world.isLoaded(space)) {
+                continue;
+            }
+            BlockPos below = space.below();
+            if (!below.equals(pos) && this.world.isLoaded(below)) {
+                BlockState belowState = this.world.state(below);
+                if (ComponentCatalog.isPiston(belowState) || ComponentCatalog.isDispenserLike(belowState)) {
+                    this.add(result, pos, below, EdgeType.HALF, true, List.of(space), null, k, null);
+                }
+            }
+            BlockPos door = pos.relative(k);
+            BlockState doorState = this.world.state(door);
+            if (ComponentCatalog.isDoor(doorState)) {
+                Direction sibling = doorState.getValue(DoorBlock.HALF) == DoubleBlockHalf.LOWER
+                        ? Direction.UP : Direction.DOWN;
+                BlockPos other = door.relative(sibling);
+                if (this.world.isLoaded(other)) {
+                    this.add(result, pos, other, EdgeType.HALF, true, List.of(door), null, k, null);
+                }
+            }
+        }
     }
 
     private void addPp(BlockPos pos, BlockState state, List<Candidate> result) {
@@ -485,7 +534,7 @@ public final class ConnectionEngine {
         return neighbour.isSignalSource() && dirFromWireToNeighbour != null;
     }
 
-    private static boolean emitsToward(BlockState state, Direction k) {
+    private boolean emitsToward(BlockPos pos, BlockState state, Direction k) {
         if (ComponentCatalog.isDiode(state) || ComponentCatalog.isObserver(state)) {
             Direction f = ComponentCatalog.inputFacing(state);
             return f != null && k == f.getOpposite();
@@ -498,16 +547,43 @@ public final class ConnectionEngine {
             return k != Direction.DOWN;
         }
         if (ComponentCatalog.isWire(state)) {
-            return k != Direction.DOWN;
+            return wireEmitsToward(pos, k);
         }
         return true;
     }
 
-    private boolean stronglyPowers(BlockPos pos, Direction k, BlockState state) {
-        if (stronglyEmitsToward(state, k)) {
+    /**
+     * Vanilla redstone wire emits down into the block it sits on and horizontally through every
+     * connected side (its "pointing"), but never straight up.
+     */
+    private boolean wireEmitsToward(BlockPos wirePos, Direction k) {
+        if (k == Direction.DOWN) {
             return true;
         }
-        return this.world.directSignalTo(pos, k) > 0;
+        if (k == Direction.UP) {
+            return false;
+        }
+        EnumProperty<RedstoneSide> property = wireProperty(k);
+        if (property == null) {
+            return false;
+        }
+        BlockState wire = this.world.state(wirePos);
+        return wire.hasProperty(property) && wire.getValue(property).isConnected();
+    }
+
+    private static @Nullable EnumProperty<RedstoneSide> wireProperty(Direction k) {
+        return switch (k) {
+            case NORTH -> BlockStateProperties.NORTH_REDSTONE;
+            case SOUTH -> BlockStateProperties.SOUTH_REDSTONE;
+            case EAST -> BlockStateProperties.EAST_REDSTONE;
+            case WEST -> BlockStateProperties.WEST_REDSTONE;
+            default -> null;
+        };
+    }
+
+    /** Strong charge only comes from genuinely strong emitters; a wire's weak signal must never charge. */
+    private static boolean stronglyPowers(BlockState state, Direction k) {
+        return stronglyEmitsToward(state, k);
     }
 
     private static boolean stronglyEmitsToward(BlockState state, Direction k) {

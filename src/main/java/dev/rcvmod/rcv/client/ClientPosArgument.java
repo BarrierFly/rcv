@@ -9,10 +9,12 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import java.util.Collection;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -46,15 +48,14 @@ public final class ClientPosArgument implements ArgumentType<ClientPosArgument.P
     }
 
     /**
-     * Brigadier 1.1 exposes suggestions through {@link ArgumentType#listSuggestions}; this offers
-     * {@code ~} and the player's current coordinate for each of the three components.
+     * Brigadier 1.1 exposes suggestions through {@link ArgumentType#listSuggestions}. The looked-at
+     * block takes priority; we suggest its integer block coordinate (and the {@code ~} offset to it).
      */
     @Override
     public <S> CompletableFuture<Suggestions> listSuggestions(CommandContext<S> context, SuggestionsBuilder builder) {
         if (!(context.getSource() instanceof FabricClientCommandSource source)) {
             return builder.buildFuture();
         }
-        Vec3 position = source.getPosition();
         String remaining = builder.getRemaining();
         int tokenStart = remaining.lastIndexOf(' ') + 1;
         int index = 0;
@@ -66,20 +67,28 @@ public final class ClientPosArgument implements ArgumentType<ClientPosArgument.P
         if (index > 2) {
             return builder.buildFuture();
         }
-        double current = switch (index) {
-            case 0 -> position.x;
-            case 1 -> position.y;
-            default -> position.z;
-        };
+        BlockPos player = BlockPos.containing(source.getPosition());
+        BlockPos look = Minecraft.getInstance().hitResult instanceof BlockHitResult hit
+                ? hit.getBlockPos() : player;
+        int absolute = component(look, index);
+        int relative = absolute - component(player, index);
         String token = remaining.substring(tokenStart);
         SuggestionsBuilder target = builder.createOffset(builder.getStart() + tokenStart);
         if (token.isEmpty()) {
-            target.suggest("~");
-            target.suggest(format(current));
-        } else if (token.equals("~")) {
-            target.suggest("~" + format(current));
+            target.suggest(Integer.toString(absolute));
+            target.suggest("~" + relative);
+        } else if (token.startsWith("~")) {
+            target.suggest("~" + relative);
         }
         return target.buildFuture();
+    }
+
+    private static int component(BlockPos pos, int index) {
+        return switch (index) {
+            case 0 -> pos.getX();
+            case 1 -> pos.getY();
+            default -> pos.getZ();
+        };
     }
 
     private static void skipSpace(StringReader reader) throws CommandSyntaxException {
@@ -100,13 +109,6 @@ public final class ClientPosArgument implements ArgumentType<ClientPosArgument.P
             return reader.readDouble();
         }
         return 0.0;
-    }
-
-    private static String format(double value) {
-        if (value == Math.floor(value) && !Double.isInfinite(value)) {
-            return Long.toString((long) value);
-        }
-        return String.format(Locale.ROOT, "%.2f", value);
     }
 
     @Override
