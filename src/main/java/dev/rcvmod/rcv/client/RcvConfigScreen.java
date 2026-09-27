@@ -77,10 +77,11 @@ public final class RcvConfigScreen {
 
         ConfigCategory colors = builder.getOrCreateCategory(Component.literal("Colors"));
         for (EdgeType type : EdgeType.values()) {
-            colors.addEntry(entries.startColorField(Component.literal(type.id()),
-                            config.colors.getOrDefault(type.name(), RcvConfig.defaultColor(type, false)))
-                    .setDefaultValue(RcvConfig.defaultColor(type, false))
-                    .setSaveConsumer(value -> config.colors.put(type.name(), value))
+            // Cloth's color field is RGB only ("transparency is not allowed"), so strip/store the alpha here.
+            int rgb = config.colors.getOrDefault(type.name(), RcvConfig.defaultColor(type, false)) & 0xFFFFFF;
+            colors.addEntry(entries.startColorField(Component.literal(type.id()), rgb)
+                    .setDefaultValue(RcvConfig.defaultColor(type, false) & 0xFFFFFF)
+                    .setSaveConsumer(value -> config.colors.put(type.name(), 0xFF000000 | (value & 0xFFFFFF)))
                     .build());
         }
 

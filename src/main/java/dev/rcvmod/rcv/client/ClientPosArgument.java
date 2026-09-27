@@ -2,18 +2,27 @@ package dev.rcvmod.rcv.client;
 
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.arguments.ArgumentType;
+import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
+import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
 
 /**
  * A tiny, version-portable replacement for {@code BlockPosArgument} for client commands, supporting
  * absolute integers and {@code ~} relative coordinates (resolved against the client player later).
+ * Implements {@link SuggestionProvider} so Brigadier still offers coordinate completion.
  */
-public final class ClientPosArgument implements ArgumentType<ClientPosArgument.Pos> {
+public final class ClientPosArgument
+        implements ArgumentType<ClientPosArgument.Pos>, SuggestionProvider<FabricClientCommandSource> {
 
     private static final SimpleCommandExceptionType ERROR = new SimpleCommandExceptionType(
             Component.literal("Expected coordinates"));
@@ -39,6 +48,37 @@ public final class ClientPosArgument implements ArgumentType<ClientPosArgument.P
         return new Pos(x, y, z, relativeX, relativeY, relativeZ);
     }
 
+    @Override
+    public CompletableFuture<Suggestions> getSuggestions(CommandContext<FabricClientCommandSource> context,
+                                                         SuggestionsBuilder builder) {
+        Vec3 position = context.getSource().getPosition();
+        String remaining = builder.getRemaining();
+        int tokenStart = remaining.lastIndexOf(' ') + 1;
+        int index = 0;
+        for (int i = 0; i < tokenStart; i++) {
+            if (remaining.charAt(i) == ' ') {
+                index++;
+            }
+        }
+        if (index > 2) {
+            return builder.buildFuture();
+        }
+        double current = switch (index) {
+            case 0 -> position.x;
+            case 1 -> position.y;
+            default -> position.z;
+        };
+        String token = remaining.substring(tokenStart);
+        SuggestionsBuilder target = builder.createOffset(builder.getStart() + tokenStart);
+        if (token.isEmpty()) {
+            target.suggest("~");
+            target.suggest(format(current));
+        } else if (token.equals("~")) {
+            target.suggest("~" + format(current));
+        }
+        return target.buildFuture();
+    }
+
     private static void skipSpace(StringReader reader) throws CommandSyntaxException {
         if (!reader.canRead() || reader.peek() != ' ') {
             throw ERROR.createWithContext(reader);
@@ -57,6 +97,13 @@ public final class ClientPosArgument implements ArgumentType<ClientPosArgument.P
             return reader.readDouble();
         }
         return 0.0;
+    }
+
+    private static String format(double value) {
+        if (value == Math.floor(value) && !Double.isInfinite(value)) {
+            return Long.toString((long) value);
+        }
+        return String.format(Locale.ROOT, "%.2f", value);
     }
 
     @Override

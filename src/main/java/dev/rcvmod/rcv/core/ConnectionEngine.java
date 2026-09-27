@@ -158,11 +158,11 @@ public final class ConnectionEngine {
             if (ComponentCatalog.isDiode(rs)) {
                 Direction f = ComponentCatalog.inputFacing(rs);
                 if (f != null) {
-                    if (k == f && (emits || ComponentCatalog.isWire(state))) {
+                    if (k == f.getOpposite() && (emits || ComponentCatalog.isWire(state))) {
                         this.add(result, pos, r, EdgeType.CIRCUIT, true, null, null, f, null);
                     } else if (ComponentCatalog.isComparator(rs) && (k == f.getClockWise() || k == f.getCounterClockWise())
                             && (emits || ComponentCatalog.isWire(state))) {
-                        String port = k == f.getClockWise() ? "SIDE_R" : "SIDE_L";
+                        String port = k == f.getClockWise() ? "SIDE_L" : "SIDE_R";
                         this.add(result, pos, r, EdgeType.COMPARATOR_SIDE, true, null, null, f, port);
                     }
                 }
@@ -188,7 +188,7 @@ public final class ConnectionEngine {
                 continue;
             }
             BlockState rs = this.world.state(r);
-            if (ComponentCatalog.isComparator(rs) && ComponentCatalog.inputFacing(rs) == k) {
+            if (ComponentCatalog.isComparator(rs) && ComponentCatalog.inputFacing(rs) == k.getOpposite()) {
                 if (state.hasAnalogOutputSignal()) {
                     this.add(result, pos, r, EdgeType.ANALOG, true, null, null, k, null);
                 }
@@ -508,7 +508,7 @@ public final class ConnectionEngine {
     private static boolean canReceiveCharge(BlockState target, Direction dirFromConductorToTarget) {
         if (ComponentCatalog.isDiode(target)) {
             Direction f = ComponentCatalog.inputFacing(target);
-            return f != null && dirFromConductorToTarget == f;
+            return f != null && dirFromConductorToTarget == f.getOpposite();
         }
         if (ComponentCatalog.isRedstoneTorch(target)) {
             return true;
