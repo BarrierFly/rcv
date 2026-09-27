@@ -96,7 +96,7 @@ public final class GraphGeometry {
                 {cx + half, cy + half, cz + half}, {cx - half, cy + half, cz + half}};
         int[][] edges = {{0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6}, {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
         for (int[] e : edges) {
-            segments.add(new Segment(vec(corners[e[0]]), vec(corners[e[1]]), color, config.lineWidth));
+            segments.add(new Segment(vec(corners[e[0]]), vec(corners[e[1]]), color, config.nodeLineWidth));
         }
     }
 
@@ -107,7 +107,7 @@ public final class GraphGeometry {
             return;
         }
         int color = withAlpha(config.color(edge.type), alphaForDepth(from.depth));
-        float width = config.lineWidth;
+        float width = config.edgeLineWidth;
         Vec3 a = Vec3.atCenterOf(from.pos);
         if (edge.hasVia()) {
             Vec3 previous = a;

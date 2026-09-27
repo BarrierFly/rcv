@@ -42,9 +42,13 @@ public final class RcvConfigScreen {
                 .setDefaultValue(16)
                 .setSaveConsumer(value -> config.defaultDepth = value)
                 .build());
-        general.addEntry(entries.startFloatField(Component.literal("Line width"), config.lineWidth)
+        general.addEntry(entries.startFloatField(Component.literal("Node line width"), config.nodeLineWidth)
                 .setDefaultValue(2.0f)
-                .setSaveConsumer(value -> config.lineWidth = value)
+                .setSaveConsumer(value -> config.nodeLineWidth = value)
+                .build());
+        general.addEntry(entries.startFloatField(Component.literal("Edge line width"), config.edgeLineWidth)
+                .setDefaultValue(10.0f)
+                .setSaveConsumer(value -> config.edgeLineWidth = value)
                 .build());
         general.addEntry(entries.startIntField(Component.literal("Auto-clear (seconds, 0 = off)"),
                         config.autoClearSeconds)

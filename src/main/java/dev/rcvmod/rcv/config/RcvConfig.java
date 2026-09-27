@@ -24,7 +24,8 @@ public final class RcvConfig {
     private static RcvConfig instance;
 
     public boolean alternatePalette = false;
-    public float lineWidth = 2.0f;
+    public float nodeLineWidth = 2.0f;
+    public float edgeLineWidth = 10.0f;
     public int defaultDepth = 16;
     public boolean showHud = true;
     public int autoClearSeconds = 0;
