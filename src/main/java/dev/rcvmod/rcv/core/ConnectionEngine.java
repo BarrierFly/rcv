@@ -279,7 +279,7 @@ public final class ConnectionEngine {
                     continue;
                 }
                 BlockState ts = this.world.state(t);
-                if (!canReceiveCharge(ts, m)) {
+                if (!canReceiveCharge(ts, m, ComponentCatalog.isWire(state))) {
                     continue;
                 }
                 this.add(result, pos, t, EdgeType.CHARGE, true, List.of(c), null, m, null);
@@ -604,7 +604,8 @@ public final class ConnectionEngine {
         };
     }
 
-    private static boolean canReceiveCharge(BlockState target, Direction dirFromConductorToTarget) {
+    private static boolean canReceiveCharge(BlockState target, Direction dirFromConductorToTarget,
+                                             boolean chargedByWire) {
         if (ComponentCatalog.isDiode(target)) {
             Direction f = ComponentCatalog.inputFacing(target);
             return f != null && dirFromConductorToTarget == f.getOpposite();
@@ -614,9 +615,14 @@ public final class ConnectionEngine {
             // A torch is only affected when the charged conductor is the block it is attached to.
             return dirFromConductorToTarget == attach.getOpposite();
         }
-        // Only blocks that actually react to power (or redstone wire) may be charged; otherwise a lever,
-        // button, torch, ... next to a strongly powered conductor would get a bogus CHARGE edge.
-        return ComponentCatalog.isConsumer(target) || ComponentCatalog.isWire(target);
+        if (ComponentCatalog.isWire(target)) {
+            // A conductor charged only by redstone wire (weak charge) must not feed redstone wire; it can
+            // still power non-wire components, and a conductor charged by another component can do both.
+            return !chargedByWire;
+        }
+        // Only blocks that actually react to power may be charged; otherwise a lever, button, ... next
+        // to a charged conductor would get a bogus CHARGE edge.
+        return ComponentCatalog.isConsumer(target);
     }
 
     private static boolean neighbourAffectsConnectivity(BlockPos a, BlockState as, BlockPos b, BlockState bs,
