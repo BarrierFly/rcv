@@ -169,7 +169,7 @@ public final class ConnectionEngine {
                     if (k == f.getOpposite() && (emits || ComponentCatalog.isWire(state)) && emitsToward(pos, state, k)) {
                         this.add(result, pos, r, EdgeType.CIRCUIT, true, null, null, f, null);
                     } else if (ComponentCatalog.isComparator(rs) && (k == f.getClockWise() || k == f.getCounterClockWise())
-                            && (emits || ComponentCatalog.isWire(state)) && emitsToward(pos, state, k)) {
+                            && this.world.controlInputSignal(pos, k.getOpposite(), false) > 0) {
                         String port = k == f.getClockWise() ? "SIDE_L" : "SIDE_R";
                         this.add(result, pos, r, EdgeType.COMPARATOR_SIDE, true, null, null, f, port);
                     }
@@ -405,18 +405,7 @@ public final class ConnectionEngine {
         this.addHalf(pos, state, result);
 
         // NC.
-        if (this.options.ncMode == NcMode.ALL && ComponentCatalog.canChangeState(state)
-                && this.options.allows(EdgeType.NC)) {
-            for (Direction k : Direction.values()) {
-                BlockPos r = pos.relative(k);
-                if (!this.world.isLoaded(r)) {
-                    continue;
-                }
-                if (ComponentCatalog.isResponsive(this.world.state(r))) {
-                    this.add(result, pos, r, EdgeType.NC, true, null, null, k, null);
-                }
-            }
-        }
+        this.addNc(pos, state, result);
 
         // PP.
         this.addPp(pos, state, result);
@@ -501,21 +490,101 @@ public final class ConnectionEngine {
             }
         }
         if (ComponentCatalog.isWire(state)) {
+            // Mirrors RedStoneWireBlock.updateIndirectNeighbourShapes (§11.2): a wire that points at a
+            // non-wire neighbour makes the wire diagonally above/below that neighbour re-evaluate its
+            // shape, because the wire directly above/below this one may now connect to it.
             for (Direction k : Direction.Plane.HORIZONTAL) {
-                Direction[] diag = diagonal(k);
-                for (Direction d : diag) {
-                    BlockPos r = pos.relative(k).relative(d);
-                    if (this.world.isLoaded(r) && ComponentCatalog.isResponsive(this.world.state(r))) {
-                        this.add(result, pos, r, EdgeType.PP, true, null, null, k, null);
-                    }
+                BlockPos side = pos.relative(k);
+                if (!this.world.isLoaded(side) || ComponentCatalog.isWire(this.world.state(side))
+                        || !wireEmitsToward(pos, k)) {
+                    continue;
                 }
-                for (Direction vertical : new Direction[]{Direction.UP, Direction.DOWN}) {
-                    BlockPos r = pos.relative(k).relative(vertical);
-                    if (this.world.isLoaded(r) && ComponentCatalog.isResponsive(this.world.state(r))) {
-                        this.add(result, pos, r, EdgeType.PP, true, null, null, vertical, null);
+                for (Direction vertical : new Direction[]{Direction.DOWN, Direction.UP}) {
+                    BlockPos diagonal = side.relative(vertical);
+                    if (this.world.isLoaded(diagonal) && ComponentCatalog.isWire(this.world.state(diagonal))) {
+                        this.add(result, pos, diagonal, EdgeType.PP, true, null, null, vertical, null);
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Neighbour update (NC) coverage (§10). Only blocks whose redstone signal/power actually changes
+     * emit NC; the target set mirrors the vanilla call sites:
+     * <ul>
+     *   <li>wire: own 6 neighbours plus the {@code checkCornerChangeAt} corner wires' neighbours;</li>
+     *   <li>repeater/comparator/observer: the output block and its 5 neighbours (skipping the
+     *       source, {@code updateNeighborsInFront});</li>
+     *   <li>lever/button: own 6 neighbours plus the support block's 6 neighbours;</li>
+     *   <li>redstone torch/note block/scaffolding: own 6 neighbours.</li>
+     * </ul>
+     */
+    private void addNc(BlockPos pos, BlockState state, List<Candidate> result) {
+        if (this.options.ncMode != NcMode.ALL || !this.options.allows(EdgeType.NC)
+                || !ComponentCatalog.emitsNc(state)) {
+            return;
+        }
+        Set<BlockPos> targets = new HashSet<>();
+        if (ComponentCatalog.isWire(state)) {
+            addNeighbors(pos, targets);
+            // RedStoneWireBlock.updateNeighborsOfNeighboringWires -> checkCornerChangeAt: each
+            // horizontally adjacent wire also updates its own neighbours, and a wire diagonally
+            // above/below a side block is reached across that support. Only the first hop from the
+            // corner is modelled; the vanilla second hop can exceed the ±2 incoming scan, which would
+            // break IN/OUT symmetry.
+            for (Direction k : Direction.Plane.HORIZONTAL) {
+                BlockPos adjacent = pos.relative(k);
+                if (this.world.isLoaded(adjacent) && ComponentCatalog.isWire(this.world.state(adjacent))) {
+                    addNeighbors(adjacent, targets);
+                }
+            }
+            for (Direction k : Direction.Plane.HORIZONTAL) {
+                BlockPos side = pos.relative(k);
+                if (!this.world.isLoaded(side)) {
+                    continue;
+                }
+                BlockPos corner = this.world.isConductor(side) ? side.above() : side.below();
+                if (this.world.isLoaded(corner) && ComponentCatalog.isWire(this.world.state(corner))) {
+                    addNeighbors(corner, targets);
+                }
+            }
+        } else if (ComponentCatalog.isDiode(state) || ComponentCatalog.isObserver(state)) {
+            Direction f = ComponentCatalog.inputFacing(state);
+            if (f != null) {
+                BlockPos front = pos.relative(f.getOpposite());
+                targets.add(front);
+                for (Direction d : Direction.values()) {
+                    if (d != f) {
+                        targets.add(front.relative(d));
+                    }
+                }
+            }
+        } else if (ComponentCatalog.isLever(state) || ComponentCatalog.isButton(state)) {
+            addNeighbors(pos, targets);
+            Direction support = ComponentCatalog.supportDirection(state);
+            if (support != null) {
+                addNeighbors(pos.relative(support), targets);
+            }
+        } else {
+            addNeighbors(pos, targets);
+        }
+        for (BlockPos target : targets) {
+            if (target.equals(pos) || !this.world.isLoaded(target)) {
+                continue;
+            }
+            if (ComponentCatalog.isResponsive(this.world.state(target))) {
+                this.add(result, pos, target, EdgeType.NC, true, null, null, null, null);
+            }
+        }
+    }
+
+    private void addNeighbors(BlockPos center, Set<BlockPos> targets) {
+        if (!this.world.isLoaded(center)) {
+            return;
+        }
+        for (Direction d : Direction.values()) {
+            targets.add(center.relative(d));
         }
     }
 
@@ -577,10 +646,6 @@ public final class ConnectionEngine {
     }
 
     // ------------------------------------------------------------------ helpers
-
-    private static Direction[] diagonal(Direction horizontal) {
-        return new Direction[]{horizontal.getClockWise(), horizontal.getCounterClockWise()};
-    }
 
     private static boolean isFenceBarsWall(BlockState state) {
         return ComponentCatalog.isFence(state) || ComponentCatalog.isIronBars(state) || ComponentCatalog.isWall(state);

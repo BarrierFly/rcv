@@ -3,6 +3,7 @@ package dev.rcvmod.rcv.core;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -10,19 +11,23 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 /**
  * SHAPE connection rules, expressed as "when A's easily-toggled state changes, B's shape follows".
  *
- * <p>The only easily-toggled state RCV models here is {@code OPEN} on doors and trap doors: flipping
- * it moves a thin panel, which flips the face sturdiness a neighbouring fence / iron bars / wall (or
- * a scaffolding that is supported from below) sees. The connection is reported even when the block
- * is not currently in the connected state, as long as flipping {@code OPEN} would change the face.
+ * <p>The only easily-toggled state RCV models here is {@code OPEN} on doors, trap doors and fence
+ * gates: flipping it moves a thin panel, which flips the face sturdiness a neighbouring fence /
+ * iron bars / wall (or a scaffolding that is supported from below) sees. For fence gates the
+ * toggle only changes the {@code UP} support shape ({@code getBlockSupportShape}), so it matters
+ * for the scaffolding-above dependency rather than for horizontal fence shapes. The connection is
+ * reported even when the block is not currently in the connected state, as long as flipping
+ * {@code OPEN} would change the face.
  */
 public final class ShapeConnectivity {
 
     private ShapeConnectivity() {
     }
 
-    /** True when the block is a door or trap door (it has the {@code OPEN} property). */
+    /** True when the block has an {@code OPEN} property whose flip can change a face's support. */
     public static boolean isOpenMutable(BlockState state) {
-        return state.getBlock() instanceof DoorBlock || state.getBlock() instanceof TrapDoorBlock;
+        return state.getBlock() instanceof DoorBlock || state.getBlock() instanceof TrapDoorBlock
+                || state.getBlock() instanceof FenceGateBlock;
     }
 
     /**

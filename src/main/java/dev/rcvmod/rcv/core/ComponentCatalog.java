@@ -17,6 +17,7 @@ import net.minecraft.world.level.block.DiodeBlock;
 import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock;
 import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.HopperBlock;
@@ -209,10 +210,31 @@ public final class ComponentCatalog {
                 || isConnectivity(state) || isDistanceBlock(state) || isRail(state);
     }
 
-    /** The state may change in reaction to redstone (used for NC source filtering). */
-    public static boolean canChangeState(BlockState state) {
-        return isComponent(state) || isPiston(state) || isDoor(state) || isTrapDoor(state)
-                || isDispenserLike(state) || isRail(state) || isConnectivity(state) || isDistanceBlock(state);
+    /**
+     * True for blocks whose <em>redstone signal / power</em> change actually emits a neighbour
+     * update (NC). Shape-only changes (fences, doors, ...) propagate through {@code updateShape}
+     * and must not be treated as NC sources (§10.2).
+     */
+    public static boolean emitsNc(BlockState state) {
+        return isWire(state) || isDiode(state) || isObserver(state) || isRedstoneTorch(state)
+                || isLever(state) || isButton(state) || isNoteBlock(state) || isScaffolding(state);
+    }
+
+    /** Direction from a lever/button towards the block it is attached to, or {@code null}. */
+    public static @Nullable Direction supportDirection(BlockState state) {
+        if (!(state.getBlock() instanceof FaceAttachedHorizontalDirectionalBlock)) {
+            return null;
+        }
+        Direction connected = switch (state.getValue(BlockStateProperties.ATTACH_FACE)) {
+            case CEILING -> Direction.DOWN;
+            case FLOOR -> Direction.UP;
+            default -> state.getValue(HorizontalDirectionalBlock.FACING);
+        };
+        return connected.getOpposite();
+    }
+
+    public static boolean isNoteBlock(BlockState state) {
+        return state.getBlock() instanceof NoteBlock;
     }
 
     public static boolean isButton(BlockState state) {

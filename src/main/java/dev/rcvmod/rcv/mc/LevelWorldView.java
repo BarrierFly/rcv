@@ -54,23 +54,8 @@ public final class LevelWorldView implements WorldView {
     }
 
     @Override
-    public int directSignalTo(BlockPos emitter, Direction dirFromEmitterToReceiver) {
-        return this.level.getDirectSignal(emitter, dirFromEmitterToReceiver.getOpposite());
-    }
-
-    @Override
     public int controlInputSignal(BlockPos emitterPos, Direction dirFromReceiverToEmitter, boolean diodesOnly) {
         return this.level.getControlInputSignal(emitterPos, dirFromReceiverToEmitter, diodesOnly);
-    }
-
-    @Override
-    public boolean hasNeighborSignal(BlockPos pos) {
-        return this.level.hasNeighborSignal(pos);
-    }
-
-    @Override
-    public int bestNeighborSignal(BlockPos pos) {
-        return this.level.getBestNeighborSignal(pos);
     }
 
     @Override
