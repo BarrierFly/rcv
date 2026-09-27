@@ -26,6 +26,9 @@
   "rcv.edge.tripwire": "绊线连接",
   "rcv.edge.piston": "活塞连接",
   "rcv.edge.door_pair": "门两半连接",
+  "rcv.edge.rail": "电力铁轨",
+  "rcv.edge.shape": "形状连接",
+  "rcv.edge.distance": "距离连接",
   "rcv.edge.nc": "NC 更新",
   "rcv.edge.pp": "PP 更新"
 }

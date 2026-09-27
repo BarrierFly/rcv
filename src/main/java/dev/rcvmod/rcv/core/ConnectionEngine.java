@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.ObserverBlock;
 import net.minecraft.world.level.block.RepeaterBlock;
 import net.minecraft.world.level.block.RedstoneWallTorchBlock;
+import net.minecraft.world.level.block.TripWireHookBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -30,7 +31,8 @@ import org.jetbrains.annotations.Nullable;
 /** Computes the reachable subgraph around an origin (§4). */
 public final class ConnectionEngine {
 
-    public static final int RAIL_RANGE = 8;
+    /** Vanilla pistons can push/pull up to 12 blocks. */
+    private static final int PISTON_RANGE = 12;
 
     private final WorldView world;
     private final GraphOptions options;
@@ -252,7 +254,9 @@ public final class ConnectionEngine {
             BlockState ts = this.world.state(t);
             Direction f = ComponentCatalog.inputFacing(ts);
             if (ComponentCatalog.isComparator(ts) && f == k.getOpposite()) {
-                boolean frame = !this.world.itemFrames(mid, k).isEmpty();
+                // Vanilla queries the item frame at the far block (two in front of the comparator),
+                // facing the same direction as the comparator's input side.
+                boolean frame = !this.world.itemFrames(pos, f).isEmpty();
                 if (state.hasAnalogOutputSignal() || frame) {
                     this.add(result, pos, t, EdgeType.ANALOG, true, List.of(mid), null, k, null);
                 }
@@ -294,10 +298,10 @@ public final class ConnectionEngine {
                 PistonResult pr = this.world.pistonStructure(pos, f, !extended);
                 if (pr.resolved()) {
                     for (BlockPos p : pr.toPush()) {
-                        this.add(result, pos, p, EdgeType.PISTON, true, null, null, f, null);
+                        this.add(result, pos, p, EdgeType.PISTON, true, null, NodeKind.MOVED, f, null);
                     }
                     for (BlockPos p : pr.toDestroy()) {
-                        this.add(result, pos, p, EdgeType.PISTON, true, null, null, f, null);
+                        this.add(result, pos, p, EdgeType.PISTON, true, null, NodeKind.MOVED, f, null);
                     }
                 }
             }
@@ -312,7 +316,8 @@ public final class ConnectionEngine {
             }
         }
 
-        // TRIPWIRE.
+        // TRIPWIRE: mirrors TripWireBlock.shouldConnectTo - a wire connects to a hook only when the
+        // hook faces back along the wire; two hooks never connect directly.
         if (ComponentCatalog.isTripwire(state) || ComponentCatalog.isTripwireHook(state)) {
             for (Direction k : Direction.Plane.HORIZONTAL) {
                 BlockPos r = pos.relative(k);
@@ -320,7 +325,16 @@ public final class ConnectionEngine {
                     continue;
                 }
                 BlockState rs = this.world.state(r);
-                if (ComponentCatalog.isTripwire(rs) || ComponentCatalog.isTripwireHook(rs)) {
+                boolean connect;
+                if (ComponentCatalog.isTripwire(rs)) {
+                    connect = ComponentCatalog.isTripwire(state)
+                            || state.getValue(TripWireHookBlock.FACING) == k;
+                } else if (ComponentCatalog.isTripwireHook(rs) && ComponentCatalog.isTripwire(state)) {
+                    connect = rs.getValue(TripWireHookBlock.FACING) == k.getOpposite();
+                } else {
+                    connect = false;
+                }
+                if (connect) {
                     this.addUndirected(result, pos, r, EdgeType.TRIPWIRE, null, null);
                 }
             }
@@ -328,20 +342,26 @@ public final class ConnectionEngine {
 
         // RAIL propagation.
         if (ComponentCatalog.isPoweredRail(state)) {
-            for (BlockPos p : this.railChain(pos, RAIL_RANGE)) {
+            for (BlockPos p : this.railChain(pos, this.options.railRange)) {
                 this.add(result, pos, p, EdgeType.RAIL, true, null, null, null, null);
             }
         }
 
-        // SHAPE.
+        // SHAPE: an undirected link when either side attaches/connects towards the other, using the
+        // vanilla connectsTo/attachsTo rules (face-sturdy support, same family, aligned gate, bell
+        // attachment). Making it undirected keeps IN/OUT symmetric.
         for (Direction k : Direction.values()) {
             BlockPos r = pos.relative(k);
             if (!this.world.isLoaded(r)) {
                 continue;
             }
             BlockState rs = this.world.state(r);
-            if (ComponentCatalog.isConnectivity(rs) && neighbourAffectsConnectivity(pos, state, r, rs, k)) {
-                this.add(result, pos, r, EdgeType.SHAPE, true, null, null, k, null);
+            if (!ComponentCatalog.isConnectivity(state) && !ComponentCatalog.isConnectivity(rs)) {
+                continue;
+            }
+            if (ShapeConnectivity.connectsToward(this.world, pos, state, k)
+                    || ShapeConnectivity.connectsToward(this.world, r, rs, k.getOpposite())) {
+                this.addUndirected(result, pos, r, EdgeType.SHAPE, null, k);
             }
         }
 
@@ -358,12 +378,22 @@ public final class ConnectionEngine {
             for (Direction k : Direction.Plane.HORIZONTAL) {
                 BlockPos r = pos.relative(k);
                 if (this.world.isLoaded(r) && ComponentCatalog.isScaffolding(this.world.state(r))) {
-                    this.addUndirected(result, pos, r, EdgeType.DISTANCE, null, null);
+                    this.addUndirected(result, pos, r, EdgeType.DISTANCE, null, k);
                 }
             }
             BlockPos up = pos.above();
             if (this.world.isLoaded(up) && ComponentCatalog.isScaffolding(this.world.state(up))) {
-                this.add(result, pos, up, EdgeType.DISTANCE, true, null, null, Direction.UP, null);
+                this.addUndirected(result, pos, up, EdgeType.DISTANCE, null, Direction.UP);
+            }
+            // Vanilla ScaffoldingBlock.getDistance depends on the block below: it inherits a
+            // scaffolding's DISTANCE, or is anchored (DISTANCE 0) by a face-sturdy block such as a
+            // closed trap door. This is the missed "support below" dependency.
+            BlockPos below = pos.below();
+            if (this.world.isLoaded(below)) {
+                BlockState belowState = this.world.state(below);
+                if (ComponentCatalog.isScaffolding(belowState) || this.world.isFaceSturdy(below, Direction.UP)) {
+                    this.addUndirected(result, pos, below, EdgeType.DISTANCE, null, Direction.DOWN);
+                }
             }
         }
 
@@ -439,12 +469,18 @@ public final class ConnectionEngine {
             return;
         }
         if (this.options.ppMode == PpMode.OBSERVER_ONLY) {
-            if (ComponentCatalog.isObserver(state)) {
-                Direction f = ComponentCatalog.inputFacing(state);
-                if (f != null) {
-                    BlockPos front = pos.relative(f);
-                    if (this.world.isLoaded(front)) {
-                        this.add(result, front, pos, EdgeType.PP, true, null, null, f, null);
+            // The observer receives the shape update; the edge originates from the block in front of
+            // it, so OUT(front) yields it and IN(observer) can find it (IN only matches outgoing).
+            for (Direction k : Direction.values()) {
+                BlockPos r = pos.relative(k);
+                if (!this.world.isLoaded(r)) {
+                    continue;
+                }
+                BlockState rs = this.world.state(r);
+                if (ComponentCatalog.isObserver(rs)) {
+                    Direction f = ComponentCatalog.inputFacing(rs);
+                    if (f != null && f == k.getOpposite()) {
+                        this.add(result, pos, r, EdgeType.PP, true, null, null, k, null);
                     }
                 }
             }
@@ -483,6 +519,14 @@ public final class ConnectionEngine {
 
     private List<Candidate> incoming(BlockPos pos) {
         List<Candidate> result = new ArrayList<>();
+        // Undirected edges may be generated by this block alone (the far endpoint is not part of the
+        // connectivity/distance family), so include them explicitly; the ±2 scan below only sees what
+        // the neighbours generate.
+        for (Candidate c : this.outgoing(pos)) {
+            if (!c.directed() && (c.from().equals(pos) || c.to().equals(pos))) {
+                result.add(c);
+            }
+        }
         for (int dx = -2; dx <= 2; dx++) {
             for (int dy = -2; dy <= 2; dy++) {
                 for (int dz = -2; dz <= 2; dz++) {
@@ -498,9 +542,28 @@ public final class ConnectionEngine {
                 }
             }
         }
+        // Piston edges can span up to 12 blocks, beyond the ±2 scan above. A piston that moves this
+        // block must sit on one of the six axes, facing along it.
+        for (Direction f : Direction.values()) {
+            for (int distance = 1; distance <= PISTON_RANGE; distance++) {
+                BlockPos source = pos.relative(f.getOpposite(), distance);
+                if (!this.world.isLoaded(source)) {
+                    continue;
+                }
+                BlockState sourceState = this.world.state(source);
+                if (!ComponentCatalog.isPiston(sourceState) || ComponentCatalog.inputFacing(sourceState) != f) {
+                    continue;
+                }
+                for (Candidate c : this.outgoing(source)) {
+                    if (c.to().equals(pos) && c.type() == EdgeType.PISTON) {
+                        result.add(c);
+                    }
+                }
+            }
+        }
         BlockState state = this.world.state(pos);
-        if (ComponentCatalog.isPoweredRail(state)) {
-            for (BlockPos r : this.railChain(pos, RAIL_RANGE)) {
+        if (ComponentCatalog.isPoweredRail(state) && this.options.allows(EdgeType.RAIL)) {
+            for (BlockPos r : this.railChain(pos, this.options.railRange)) {
                 if (!r.equals(pos)) {
                     result.add(new Candidate(r, pos, EdgeType.RAIL, true, List.of(), null, null, null));
                 }
@@ -623,40 +686,6 @@ public final class ConnectionEngine {
         // Only blocks that actually react to power may be charged; otherwise a lever, button, ... next
         // to a charged conductor would get a bogus CHARGE edge.
         return ComponentCatalog.isConsumer(target);
-    }
-
-    private static boolean neighbourAffectsConnectivity(BlockPos a, BlockState as, BlockPos b, BlockState bs,
-                                                        Direction dirAtoB) {
-        Direction dirBtoA = dirAtoB.getOpposite();
-        if (ComponentCatalog.isFence(bs) || ComponentCatalog.isIronBars(bs)) {
-            if (ComponentCatalog.isFence(as) || ComponentCatalog.isIronBars(as)
-                    || ComponentCatalog.isFenceGate(as)) {
-                return true;
-            }
-            return false;
-        }
-        if (ComponentCatalog.isWall(bs)) {
-            if (ComponentCatalog.isWall(as) && b.equals(a.below())) {
-                return true;
-            }
-            if (ComponentCatalog.isWall(as) || ComponentCatalog.isFence(as)
-                    || ComponentCatalog.isIronBars(as) || ComponentCatalog.isFenceGate(as)) {
-                return true;
-            }
-            return false;
-        }
-        if (ComponentCatalog.isFenceGate(bs)) {
-            return ComponentCatalog.isFence(as) || ComponentCatalog.isWall(as) || ComponentCatalog.isIronBars(as);
-        }
-        if (ComponentCatalog.isBell(bs)) {
-            return ComponentCatalog.isFence(as) || ComponentCatalog.isWall(as) || ComponentCatalog.isIronBars(as)
-                    || ComponentCatalog.isDoor(as) || ComponentCatalog.isTrapDoor(as);
-        }
-        if (ComponentCatalog.isFenceGate(as) || ComponentCatalog.isDoor(as) || ComponentCatalog.isTrapDoor(as)
-                || ComponentCatalog.isPiston(as)) {
-            return true;
-        }
-        return false;
     }
 
     private void add(List<Candidate> list, BlockPos from, BlockPos to, EdgeType type, boolean directed,

@@ -6,6 +6,7 @@ import dev.rcvmod.rcv.core.EdgeType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 
 /** HUD content (legend / counters). Registration lives in the version-specific {@code HudCompat}. */
 public final class RcvHud {
@@ -36,7 +37,8 @@ public final class RcvHud {
             if (!RcvClientState.typeMask().allows(type)) {
                 continue;
             }
-            graphics.drawString(font, "- " + type.id(), x, y, config.color(type));
+            graphics.drawString(font, "- " + Component.translatable(type.translationKey()).getString(), x, y,
+                    config.color(type));
             y += 9;
         }
         if (graph.truncated()) {

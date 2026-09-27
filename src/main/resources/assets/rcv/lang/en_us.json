@@ -26,6 +26,9 @@
   "rcv.edge.tripwire": "tripwire",
   "rcv.edge.piston": "piston",
   "rcv.edge.door_pair": "door pair",
+  "rcv.edge.rail": "powered rail",
+  "rcv.edge.shape": "shape",
+  "rcv.edge.distance": "distance",
   "rcv.edge.nc": "neighbor update",
   "rcv.edge.pp": "shape update"
 }

@@ -7,6 +7,7 @@ public final class GraphOptions {
     public static final int MAX_DEPTH = 64;
     public static final int MAX_NODES = 4096;
     public static final int MAX_EDGES = 16384;
+    public static final int DEFAULT_RAIL_RANGE = 8;
 
     public final int depth;
     public final TypeMask typeMask;
@@ -15,9 +16,15 @@ public final class GraphOptions {
     public final Region region;
     public final int maxNodes;
     public final int maxEdges;
+    public final int railRange;
 
     public GraphOptions(int depth, TypeMask typeMask, NcMode ncMode, PpMode ppMode, Region region,
                         int maxNodes, int maxEdges) {
+        this(depth, typeMask, ncMode, ppMode, region, maxNodes, maxEdges, DEFAULT_RAIL_RANGE);
+    }
+
+    public GraphOptions(int depth, TypeMask typeMask, NcMode ncMode, PpMode ppMode, Region region,
+                        int maxNodes, int maxEdges, int railRange) {
         this.depth = Math.max(1, Math.min(depth, MAX_DEPTH));
         this.typeMask = typeMask;
         this.ncMode = ncMode;
@@ -25,6 +32,7 @@ public final class GraphOptions {
         this.region = region;
         this.maxNodes = maxNodes;
         this.maxEdges = maxEdges;
+        this.railRange = Math.max(1, railRange);
     }
 
     public static GraphOptions defaults() {

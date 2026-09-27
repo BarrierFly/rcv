@@ -68,7 +68,7 @@ public final class RcvConfigScreen {
 
         ConfigCategory types = builder.getOrCreateCategory(Component.literal("Types"));
         for (EdgeType type : EdgeType.values()) {
-            types.addEntry(entries.startBooleanToggle(Component.literal(type.id()),
+            types.addEntry(entries.startBooleanToggle(Component.translatable(type.translationKey()),
                             config.enabledTypes.getOrDefault(type.name(), true))
                     .setDefaultValue(true)
                     .setSaveConsumer(value -> config.enabledTypes.put(type.name(), value))
@@ -79,7 +79,7 @@ public final class RcvConfigScreen {
         for (EdgeType type : EdgeType.values()) {
             // Cloth's color field is RGB only ("transparency is not allowed"), so strip/store the alpha here.
             int rgb = config.colors.getOrDefault(type.name(), RcvConfig.defaultColor(type, false)) & 0xFFFFFF;
-            colors.addEntry(entries.startColorField(Component.literal(type.id()), rgb)
+            colors.addEntry(entries.startColorField(Component.translatable(type.translationKey()), rgb)
                     .setDefaultValue(RcvConfig.defaultColor(type, false) & 0xFFFFFF)
                     .setSaveConsumer(value -> config.colors.put(type.name(), 0xFF000000 | (value & 0xFFFFFF)))
                     .build());

@@ -41,10 +41,6 @@ public enum EdgeType {
         return this.id;
     }
 
-    public boolean directed() {
-        return this != CIRCUIT && this != TRIPWIRE && this != DOOR_PAIR && this != DISTANCE;
-    }
-
     public String translationKey() {
         return "rcv.edge." + this.id;
     }
