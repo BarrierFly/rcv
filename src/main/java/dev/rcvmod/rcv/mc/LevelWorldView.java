@@ -107,14 +107,4 @@ public final class LevelWorldView implements WorldView {
     public boolean isFaceSturdy(BlockPos pos, Direction face) {
         return this.level.getBlockState(pos).isFaceSturdy(this.level, pos, face);
     }
-
-    @Override
-    public int minY() {
-        return this.level.getMinY();
-    }
-
-    @Override
-    public int maxY() {
-        return this.level.getMaxY();
-    }
 }

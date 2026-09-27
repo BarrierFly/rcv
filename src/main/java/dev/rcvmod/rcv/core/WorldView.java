@@ -50,8 +50,4 @@ public interface WorldView {
     List<BlockPos> railConnections(BlockPos railPos);
 
     boolean isFaceSturdy(BlockPos pos, Direction face);
-
-    int minY();
-
-    int maxY();
 }

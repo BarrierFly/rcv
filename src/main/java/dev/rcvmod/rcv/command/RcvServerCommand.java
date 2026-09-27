@@ -22,11 +22,11 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.network.chat.Component;
+import dev.rcvmod.rcv.version.ServerCompat;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -79,7 +79,7 @@ public final class RcvServerCommand {
         if (!config.requireOp || config.allowNonOp) {
             return true;
         }
-        return source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
+        return ServerCompat.hasGamemaster(source);
     }
 
     private static int run(CommandContext<CommandSourceStack> ctx, QueryMode mode, int depth, String rawOptions)
@@ -125,7 +125,7 @@ public final class RcvServerCommand {
                 source.sendSuccess(() -> Component.translatable("rcv.command.truncated", graph.nodeCount(),
                         graph.edgeCount()), false);
             }
-            renderParticles(level, source.getPlayer(), graph, parsed.mask());
+            renderParticles(level, graph, parsed.mask());
         }
 
         if (source.getPlayer() != null) {
@@ -134,11 +134,8 @@ public final class RcvServerCommand {
         return 1;
     }
 
-    private static void renderParticles(ServerLevel level, @Nullable ServerPlayer player, ConnectionGraph graph,
+    private static void renderParticles(ServerLevel level, ConnectionGraph graph,
                                         dev.rcvmod.rcv.core.TypeMask mask) {
-        if (player == null) {
-            return;
-        }
         for (GraphEdge edge : graph.edges()) {
             if (!mask.allows(edge.type)) {
                 continue;
@@ -149,12 +146,12 @@ public final class RcvServerCommand {
                 continue;
             }
             int color = 0xFF0000 | ((edge.type.ordinal() * 0x1F1F1F) & 0x00FFFF);
-            DustParticleOptions particle = new DustParticleOptions(color, 1.0F);
+            ParticleOptions particle = ServerCompat.dust(color);
             Vec3 a = Vec3.atCenterOf(from.pos);
             Vec3 b = Vec3.atCenterOf(to.pos);
             for (int i = 0; i <= 4; i++) {
                 double t = i / 4.0;
-                level.sendParticles(player, particle, true, false, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
+                level.sendParticles(particle, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
                         a.z + (b.z - a.z) * t, 1, 0.0, 0.0, 0.0, 0.0);
             }
         }

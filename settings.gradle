@@ -9,4 +9,16 @@ pluginManagement {
     }
 }
 
+plugins {
+    // Allows Gradle to download the JDK 25 toolchain required by 26.x.
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.10.0'
+}
+
 rootProject.name = 'rcv'
+
+['1.21.1', '1.21.10', '1.21.11', '26.3'].each { version ->
+    include(":$version")
+    def project = project(":$version")
+    project.projectDir = file("versions/$version")
+    project.buildFileName = '../../common.gradle'
+}

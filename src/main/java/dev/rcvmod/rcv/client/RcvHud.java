@@ -3,23 +3,17 @@ package dev.rcvmod.rcv.client;
 import dev.rcvmod.rcv.config.RcvConfig;
 import dev.rcvmod.rcv.core.ConnectionGraph;
 import dev.rcvmod.rcv.core.EdgeType;
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.Font;
-import org.jetbrains.annotations.Nullable;
+import net.minecraft.client.gui.GuiGraphics;
 
-/** Minimal always-on-top legend / counters (§8.1 HUD). */
+/** HUD content (legend / counters). Registration lives in the version-specific {@code HudCompat}. */
 public final class RcvHud {
 
     private RcvHud() {
     }
 
-    public static void register() {
-        HudRenderCallback.EVENT.register((graphics, deltaTracker) -> render(graphics));
-    }
-
-    private static void render(@Nullable GuiGraphics graphics) {
+    public static void render(GuiGraphics graphics) {
         if (graphics == null || !RcvConfig.get().showHud) {
             return;
         }
@@ -42,8 +36,7 @@ public final class RcvHud {
             if (!RcvClientState.typeMask().allows(type)) {
                 continue;
             }
-            int color = config.color(type);
-            graphics.drawString(font, "- " + type.id(), x, y, color);
+            graphics.drawString(font, "- " + type.id(), x, y, config.color(type));
             y += 9;
         }
         if (graph.truncated()) {

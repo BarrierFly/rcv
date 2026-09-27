@@ -2,6 +2,7 @@ package dev.rcvmod.rcv.client;
 
 import dev.rcvmod.rcv.config.RcvConfig;
 import dev.rcvmod.rcv.core.Region;
+import dev.rcvmod.rcv.version.ClientCompat;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.core.BlockPos;
@@ -30,22 +31,22 @@ public final class RcvWand {
                     RcvClientState.pos1 = null;
                     RcvClientState.pos2 = null;
                     RcvClientState.setRegion(null);
-                    player.displayClientMessage(Component.literal("RCV: region cleared"), true);
+                    ClientCompat.message(player, Component.literal("RCV: region cleared"));
                 } else {
                     RcvClientState.pos2 = pos.immutable();
                     if (RcvClientState.pos1 != null) {
                         RcvClientState.setRegion(Region.of(RcvClientState.pos1, RcvClientState.pos2));
-                        player.displayClientMessage(Component.literal("RCV: region " + RcvClientState.pos1.toShortString()
-                                + " .. " + RcvClientState.pos2.toShortString()), true);
+                        ClientCompat.message(player, Component.literal("RCV: region " + RcvClientState.pos1.toShortString()
+                                + " .. " + RcvClientState.pos2.toShortString()));
                     } else {
-                        player.displayClientMessage(Component.literal("RCV: pos2 " + pos.toShortString()
-                                + " (need pos1 with left click)"), true);
+                        ClientCompat.message(player, Component.literal("RCV: pos2 " + pos.toShortString()
+                                + " (need pos1 with left click)"));
                     }
                 }
             } else {
                 RcvClientState.setOriginAndCompute(pos);
-                player.displayClientMessage(Component.literal("RCV " + RcvClientState.mode().name().toLowerCase()
-                        + " from " + pos.toShortString()), true);
+                ClientCompat.message(player, Component.literal("RCV " + RcvClientState.mode().name().toLowerCase()
+                        + " from " + pos.toShortString()));
             }
             return InteractionResult.SUCCESS;
         });
@@ -56,7 +57,7 @@ public final class RcvWand {
                 return InteractionResult.PASS;
             }
             RcvClientState.pos1 = pos.immutable();
-            player.displayClientMessage(Component.literal("RCV: pos1 " + pos.toShortString()), true);
+            ClientCompat.message(player, Component.literal("RCV: pos1 " + pos.toShortString()));
             return InteractionResult.SUCCESS;
         });
     }

@@ -1,77 +1,25 @@
 plugins {
-    id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
-    id 'maven-publish'
+    id 'net.fabricmc.fabric-loom-remap' version '1.17-SNAPSHOT' apply false
+    id 'net.fabricmc.fabric-loom' version '1.17-SNAPSHOT' apply false
 }
 
-version = project.mod_version
-group = project.maven_group
-
-base {
-    archivesName = project.archives_base_name
-}
-
-repositories {
-    mavenCentral()
-    maven {
-        name = 'Shedaniel'
-        url = 'https://maven.shedaniel.me/'
+tasks.register('buildAndGather') {
+    subprojects {
+        dependsOn project.tasks.named('build')
     }
-    maven {
-        name = 'TerraformersMC'
-        url = 'https://maven.terraformersmc.com/releases/'
-    }
-}
-
-dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings loom.officialMojangMappings()
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    modImplementation "me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}"
-    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
-    modLocalRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
-
-    testImplementation platform('org.junit:junit-bom:5.11.4')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
-processResources {
-    def modVersion = project.version
-    inputs.property "version", modVersion
-    filesMatching("fabric.mod.json") {
-        expand "version": modVersion
-    }
-}
-
-tasks.withType(JavaCompile).configureEach {
-    it.options.release = 21
-    it.options.encoding = "UTF-8"
-}
-
-java {
-    withSourcesJar()
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-}
-
-jar {
-    from("LICENSE") {
-        rename { "${it}_${project.archives_base_name}" }
-    }
-}
-
-test {
-    useJUnitPlatform()
-}
-
-publishing {
-    publications {
-        create("mavenJava", MavenPublication) {
-            artifactId = project.archives_base_name
-            from components.java
+    doFirst {
+        println 'Gathering builds'
+        def buildLibs = { p -> p.layout.buildDirectory.dir('libs').get().asFile }
+        delete fileTree(buildLibs(rootProject)) { include '*' }
+        subprojects {
+            copy {
+                from(buildLibs(project)) {
+                    include '*.jar'
+                    exclude '*-dev.jar', '*-sources.jar', '*-shadow.jar'
+                }
+                into buildLibs(rootProject)
+                duplicatesStrategy = DuplicatesStrategy.INCLUDE
+            }
         }
-    }
-    repositories {
     }
 }

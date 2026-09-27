@@ -28,7 +28,6 @@ import net.minecraft.world.level.block.LightningRodBlock;
 import net.minecraft.world.level.block.NoteBlock;
 import net.minecraft.world.level.block.ObserverBlock;
 import net.minecraft.world.level.block.PoweredRailBlock;
-import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.RedstoneLampBlock;
 import net.minecraft.world.level.block.RedstoneTorchBlock;
 import net.minecraft.world.level.block.RedstoneWallTorchBlock;
@@ -84,7 +83,7 @@ public final class ComponentCatalog {
     }
 
     public static boolean isWire(BlockState state) {
-        return state.is(Blocks.REDSTONE_WIRE) || state.getBlock() instanceof RedStoneWireBlock;
+        return state.is(Blocks.REDSTONE_WIRE);
     }
 
     public static boolean isDiode(BlockState state) {
