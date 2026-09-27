@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ComparatorBlock;
 import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.DoorBlock;
@@ -195,25 +194,31 @@ public final class ConnectionEngine {
             }
         }
 
-        // Wire climbing: a wire connects diagonally to a wire on top of an adjacent solid block.
-        // Uphill requires this wire to be uncovered; downhill requires this wire to sit on a solid block.
+        // Wire climbing: a wire connects diagonally to a wire on top of an adjacent support block.
+        // Over a redstone conductor the link is bidirectional; over a non-conductor it is one-way up.
         if (ComponentCatalog.isWire(state)) {
             boolean uncovered = !this.world.isConductor(pos.above());
-            BlockPos base = pos.below();
-            boolean supported = this.world.isLoaded(base) && this.world.isFaceSturdy(base, Direction.UP);
             for (Direction k : Direction.Plane.HORIZONTAL) {
                 BlockPos mid = pos.relative(k);
-                if (!this.world.isLoaded(mid)) {
+                if (!this.world.isLoaded(mid) || !this.world.isFaceSturdy(mid, Direction.UP)) {
                     continue;
                 }
                 BlockPos up = mid.above();
-                if (uncovered && this.world.isLoaded(up) && this.world.isFaceSturdy(mid, Direction.UP)
-                        && ComponentCatalog.isWire(this.world.state(up))) {
-                    this.addUndirected(result, pos, up, EdgeType.CIRCUIT, null, k);
+                if (uncovered && this.world.isLoaded(up) && ComponentCatalog.isWire(this.world.state(up))) {
+                    if (this.world.isConductor(mid)) {
+                        this.addUndirected(result, pos, up, EdgeType.CIRCUIT, null, k);
+                    } else {
+                        this.add(result, pos, up, EdgeType.CIRCUIT, true, null, null, k, null);
+                    }
                 }
-                if (supported) {
+            }
+            // Downhill only over a redstone conductor, and only when the lower wire is not covered.
+            BlockPos base = pos.below();
+            if (this.world.isLoaded(base) && this.world.isConductor(base)) {
+                for (Direction k : Direction.Plane.HORIZONTAL) {
                     BlockPos down = base.relative(k);
-                    if (this.world.isLoaded(down) && ComponentCatalog.isWire(this.world.state(down))) {
+                    if (this.world.isLoaded(down) && ComponentCatalog.isWire(this.world.state(down))
+                            && !this.world.isConductor(down.above())) {
                         this.addUndirected(result, pos, down, EdgeType.CIRCUIT, null, k);
                     }
                 }
@@ -265,9 +270,6 @@ public final class ConnectionEngine {
                 continue;
             }
             this.add(result, pos, c, EdgeType.CHARGE, true, null, null, k, null);
-            if (!stronglyPowers(state, k)) {
-                continue;
-            }
             for (Direction m : Direction.values()) {
                 if (m == k.getOpposite()) {
                     continue;
@@ -600,25 +602,6 @@ public final class ConnectionEngine {
             case WEST -> BlockStateProperties.WEST_REDSTONE;
             default -> null;
         };
-    }
-
-    /** Strong charge only comes from genuinely strong emitters; a wire's weak signal must never charge. */
-    private static boolean stronglyPowers(BlockState state, Direction k) {
-        return stronglyEmitsToward(state, k);
-    }
-
-    private static boolean stronglyEmitsToward(BlockState state, Direction k) {
-        if (state.is(Blocks.REDSTONE_BLOCK)) {
-            return true;
-        }
-        if (ComponentCatalog.isDiode(state) || ComponentCatalog.isObserver(state)) {
-            Direction f = ComponentCatalog.inputFacing(state);
-            return f != null && k == f.getOpposite();
-        }
-        if (ComponentCatalog.isRedstoneTorch(state)) {
-            return k == Direction.UP;
-        }
-        return false;
     }
 
     private static boolean canReceiveCharge(BlockState target, Direction dirFromConductorToTarget) {
