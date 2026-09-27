@@ -22,55 +22,55 @@ public final class RcvConfigScreen {
         RcvConfig config = RcvConfig.get();
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
-                .setTitle(Component.literal("RCV Configuration"))
+                .setTitle(Component.translatable("rcv.config.title"))
                 .setSavingRunnable(config::save);
         ConfigEntryBuilder entries = builder.entryBuilder();
 
-        ConfigCategory general = builder.getOrCreateCategory(Component.literal("General"));
-        general.addEntry(entries.startBooleanToggle(Component.literal("Colorblind-friendly palette"),
+        ConfigCategory general = builder.getOrCreateCategory(Component.translatable("rcv.config.general"));
+        general.addEntry(entries.startBooleanToggle(Component.translatable("rcv.config.colorblind"),
                         config.alternatePalette)
                 .setDefaultValue(false)
-                .setTooltip(Component.literal("Use the Okabe-Ito palette for everything."))
+                .setTooltip(Component.translatable("rcv.config.colorblind.tooltip"))
                 .setSaveConsumer(value -> config.alternatePalette = value)
                 .build());
-        general.addEntry(entries.startBooleanToggle(Component.literal("Show HUD"), config.showHud)
+        general.addEntry(entries.startBooleanToggle(Component.translatable("rcv.config.show_hud"), config.showHud)
                 .setDefaultValue(true)
                 .setSaveConsumer(value -> config.showHud = value)
                 .build());
-        general.addEntry(entries.startIntSlider(Component.literal("Default depth"), config.defaultDepth, 1,
+        general.addEntry(entries.startIntSlider(Component.translatable("rcv.config.default_depth"), config.defaultDepth, 1,
                         GraphOptions.MAX_DEPTH)
                 .setDefaultValue(16)
                 .setSaveConsumer(value -> config.defaultDepth = value)
                 .build());
-        general.addEntry(entries.startFloatField(Component.literal("Node line width"), config.nodeLineWidth)
+        general.addEntry(entries.startFloatField(Component.translatable("rcv.config.node_width"), config.nodeLineWidth)
                 .setDefaultValue(2.0f)
                 .setSaveConsumer(value -> config.nodeLineWidth = value)
                 .build());
-        general.addEntry(entries.startFloatField(Component.literal("Edge line width"), config.edgeLineWidth)
+        general.addEntry(entries.startFloatField(Component.translatable("rcv.config.edge_width"), config.edgeLineWidth)
                 .setDefaultValue(10.0f)
                 .setSaveConsumer(value -> config.edgeLineWidth = value)
                 .build());
-        general.addEntry(entries.startIntField(Component.literal("Auto-clear (seconds, 0 = off)"),
+        general.addEntry(entries.startIntField(Component.translatable("rcv.config.autoclear"),
                         config.autoClearSeconds)
                 .setDefaultValue(0)
                 .setSaveConsumer(value -> config.autoClearSeconds = value)
                 .build());
-        general.addEntry(entries.startStrField(Component.literal("Wand item"), config.wandItem)
+        general.addEntry(entries.startStrField(Component.translatable("rcv.config.wand_item"), config.wandItem)
                 .setDefaultValue("minecraft:purple_dye")
                 .setSaveConsumer(value -> config.wandItem = value)
                 .build());
-        general.addEntry(entries.startStringDropdownMenu(Component.literal("PP mode"), config.ppMode)
+        general.addEntry(entries.startStringDropdownMenu(Component.translatable("rcv.config.pp_mode"), config.ppMode)
                 .setSelections(List.of(PpMode.OFF.name(), PpMode.OBSERVER_ONLY.name(), PpMode.ALL.name()))
                 .setDefaultValue(PpMode.OBSERVER_ONLY.name())
                 .setSaveConsumer(value -> config.ppMode = value)
                 .build());
-        general.addEntry(entries.startStringDropdownMenu(Component.literal("NC mode"), config.ncMode)
+        general.addEntry(entries.startStringDropdownMenu(Component.translatable("rcv.config.nc_mode"), config.ncMode)
                 .setSelections(List.of(NcMode.OFF.name(), NcMode.ALL.name()))
                 .setDefaultValue(NcMode.OFF.name())
                 .setSaveConsumer(value -> config.ncMode = value)
                 .build());
 
-        ConfigCategory types = builder.getOrCreateCategory(Component.literal("Types"));
+        ConfigCategory types = builder.getOrCreateCategory(Component.translatable("rcv.config.types"));
         for (EdgeType type : EdgeType.values()) {
             types.addEntry(entries.startBooleanToggle(Component.translatable(type.translationKey()),
                             config.enabledTypes.getOrDefault(type.name(), true))
@@ -79,7 +79,7 @@ public final class RcvConfigScreen {
                     .build());
         }
 
-        ConfigCategory colors = builder.getOrCreateCategory(Component.literal("Colors"));
+        ConfigCategory colors = builder.getOrCreateCategory(Component.translatable("rcv.config.colors"));
         for (EdgeType type : EdgeType.values()) {
             // Cloth's color field is RGB only ("transparency is not allowed"), so strip/store the alpha here.
             int rgb = config.colors.getOrDefault(type.name(), RcvConfig.defaultColor(type, false)) & 0xFFFFFF;

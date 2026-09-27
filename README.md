@@ -26,6 +26,8 @@ signal strength, nor detect faults.
   中继器 `repeater_side` 只连输出朝向它的二极管（原版 `sideInputDiodesOnly()`）。
 - 单次请求计算可达子图，带深度、区域裁剪、节点 / 边上限，结果稳定排序。
 - 世界空间线框叠加：节点立方体、边线、箭头、via 菱形路径；按类型配色，深度越深越淡。
+- 节点与边线宽分开设置（默认节点 `2`、边 `10`）；线段按“面向摄像机的四边形”绘制，
+  屏幕宽度恒定，不依赖 GL 线宽（1.21.1/1.21.10 的原版线类型会把宽度钉死在约 2.5px）。
 - 魔杖取点与区域选区（默认紫色染料）。
 - 配置 GUI：Cloth Config，两个入口 **ModMenu** 与 **`/rcv config`**。
 - 服务端兜底（`S only`）：原版客户端收到聊天汇总 + 粒子。
@@ -118,7 +120,7 @@ Windows PowerShell 使用 `.\gradlew.bat`。产物：`build/libs/rcv-mc<version>
 
 ## 配置 / Config
 
-- `config/rcv-client.json`：颜色、备用调色板、线宽、默认深度、显示类型、HUD、自动清理、魔杖物品、PP/NC 模式。
+- `config/rcv-client.json`：颜色、备用调色板、节点线宽 / 边线宽、默认深度、显示类型、HUD、自动清理、魔杖物品、PP/NC 模式。
 - `config/rcv-server.json`：启用、权限、最大深度 / 节点 / 边、NC/PP 模式、轨道范围。
 - GUI 依赖软依赖（`recommends`）：**Cloth Config** 与 **ModMenu**；缺失时 `/rcv config` 会给出提示。
 
