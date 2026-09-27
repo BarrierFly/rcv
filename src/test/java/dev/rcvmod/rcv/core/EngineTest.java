@@ -55,7 +55,21 @@ class EngineTest {
     }
 
     @Test
-    void fenceConnectsToFullBlockInBothDirections() {
+    void fenceConnectsToOpenTrapDoorInBothDirections() {
+        BlockPos fence = new BlockPos(0, 0, 0);
+        BlockPos trapDoor = new BlockPos(1, 0, 0);
+        FakeWorld world = new FakeWorld()
+                .set(fence, Blocks.OAK_FENCE.defaultBlockState())
+                .set(trapDoor, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                        .setValue(BlockStateProperties.OPEN, true))
+                .sturdy(trapDoor);
+
+        assertTrue(hasEdge(compute(world, fence, QueryMode.OUT), EdgeType.SHAPE, fence, trapDoor));
+        assertTrue(hasEdge(compute(world, trapDoor, QueryMode.IN), EdgeType.SHAPE, fence, trapDoor));
+    }
+
+    @Test
+    void fenceDoesNotConnectToFullBlock() {
         BlockPos fence = new BlockPos(0, 0, 0);
         BlockPos stone = new BlockPos(1, 0, 0);
         FakeWorld world = new FakeWorld()
@@ -64,8 +78,7 @@ class EngineTest {
                 .conductor(stone)
                 .sturdy(stone);
 
-        assertTrue(hasEdge(compute(world, fence, QueryMode.OUT), EdgeType.SHAPE, fence, stone));
-        assertTrue(hasEdge(compute(world, stone, QueryMode.IN), EdgeType.SHAPE, fence, stone));
+        assertFalse(hasEdge(compute(world, fence, QueryMode.OUT), EdgeType.SHAPE, fence, stone));
     }
 
     @Test
@@ -74,21 +87,33 @@ class EngineTest {
         BlockPos bars = new BlockPos(1, 0, 0);
         FakeWorld world = new FakeWorld()
                 .set(fence, Blocks.OAK_FENCE.defaultBlockState())
-                .set(bars, Blocks.IRON_BARS.defaultBlockState());
+                .set(bars, Blocks.IRON_BARS.defaultBlockState())
+                .sturdy(bars);
 
         assertFalse(hasEdge(compute(world, fence, QueryMode.OUT), EdgeType.SHAPE, fence, bars));
     }
 
     @Test
-    void ironBarsConnectToWallInBothDirections() {
+    void ironBarsDoNotConnectToWall() {
         BlockPos bars = new BlockPos(0, 0, 0);
         BlockPos wall = new BlockPos(1, 0, 0);
         FakeWorld world = new FakeWorld()
                 .set(bars, Blocks.IRON_BARS.defaultBlockState())
                 .set(wall, Blocks.COBBLESTONE_WALL.defaultBlockState());
 
-        assertTrue(hasEdge(compute(world, bars, QueryMode.OUT), EdgeType.SHAPE, bars, wall));
-        assertTrue(hasEdge(compute(world, wall, QueryMode.OUT), EdgeType.SHAPE, bars, wall));
+        assertFalse(hasEdge(compute(world, bars, QueryMode.OUT), EdgeType.SHAPE, bars, wall));
+    }
+
+    @Test
+    void wallsConnectVerticallyInBothDirections() {
+        BlockPos lower = new BlockPos(0, 0, 0);
+        BlockPos upper = new BlockPos(0, 1, 0);
+        FakeWorld world = new FakeWorld()
+                .set(lower, Blocks.COBBLESTONE_WALL.defaultBlockState())
+                .set(upper, Blocks.COBBLESTONE_WALL.defaultBlockState());
+
+        assertTrue(hasEdge(compute(world, lower, QueryMode.OUT), EdgeType.SHAPE, lower, upper));
+        assertTrue(hasEdge(compute(world, upper, QueryMode.IN), EdgeType.SHAPE, lower, upper));
     }
 
     @Test
