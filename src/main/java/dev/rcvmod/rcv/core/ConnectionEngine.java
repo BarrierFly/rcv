@@ -347,21 +347,26 @@ public final class ConnectionEngine {
             }
         }
 
-        // SHAPE: an undirected link when either side attaches/connects towards the other, using the
-        // vanilla connectsTo/attachsTo rules (face-sturdy support, same family, aligned gate, bell
-        // attachment). Making it undirected keeps IN/OUT symmetric.
-        for (Direction k : Direction.values()) {
-            BlockPos r = pos.relative(k);
-            if (!this.world.isLoaded(r)) {
-                continue;
+        // SHAPE (directed, influencer -> dependent). A door / trap door whose OPEN flip changes the
+        // face a neighbouring fence / iron bars / wall sees emits the edge, whether or not it is
+        // currently in the connected state. A wall below follows the wall above (UP post and arm
+        // heights depend on the above block's DOWN cover), so the upper wall emits that edge.
+        if (ShapeConnectivity.isOpenMutable(state)) {
+            for (Direction k : Direction.Plane.HORIZONTAL) {
+                BlockPos r = pos.relative(k);
+                if (!this.world.isLoaded(r)) {
+                    continue;
+                }
+                if (isFenceBarsWall(this.world.state(r))
+                        && ShapeConnectivity.openTogglesFace(this.world, pos, state, k)) {
+                    this.add(result, pos, r, EdgeType.SHAPE, true, null, null, k, null);
+                }
             }
-            BlockState rs = this.world.state(r);
-            if (!ComponentCatalog.isConnectivity(state) && !ComponentCatalog.isConnectivity(rs)) {
-                continue;
-            }
-            if (ShapeConnectivity.connectsToward(this.world, pos, state, k)
-                    || ShapeConnectivity.connectsToward(this.world, r, rs, k.getOpposite())) {
-                this.addUndirected(result, pos, r, EdgeType.SHAPE, null, k);
+        }
+        if (ComponentCatalog.isWall(state)) {
+            BlockPos below = pos.below();
+            if (this.world.isLoaded(below) && ComponentCatalog.isWall(this.world.state(below))) {
+                this.add(result, pos, below, EdgeType.SHAPE, true, null, null, Direction.DOWN, null);
             }
         }
 
@@ -375,25 +380,24 @@ public final class ConnectionEngine {
             }
         }
         if (ComponentCatalog.isScaffolding(state)) {
+            // Horizontal scaffolding mutually determines each other's distance.
             for (Direction k : Direction.Plane.HORIZONTAL) {
                 BlockPos r = pos.relative(k);
                 if (this.world.isLoaded(r) && ComponentCatalog.isScaffolding(this.world.state(r))) {
                     this.addUndirected(result, pos, r, EdgeType.DISTANCE, null, k);
                 }
             }
-            BlockPos up = pos.above();
-            if (this.world.isLoaded(up) && ComponentCatalog.isScaffolding(this.world.state(up))) {
-                this.addUndirected(result, pos, up, EdgeType.DISTANCE, null, Direction.UP);
-            }
-            // Vanilla ScaffoldingBlock.getDistance depends on the block below: it inherits a
-            // scaffolding's DISTANCE, or is anchored (DISTANCE 0) by a face-sturdy block such as a
-            // closed trap door. This is the missed "support below" dependency.
-            BlockPos below = pos.below();
-            if (this.world.isLoaded(below)) {
-                BlockState belowState = this.world.state(below);
-                if (ComponentCatalog.isScaffolding(belowState) || this.world.isFaceSturdy(below, Direction.UP)) {
-                    this.addUndirected(result, pos, below, EdgeType.DISTANCE, null, Direction.DOWN);
-                }
+        }
+        // Scaffolding support (directed, support -> scaffolding): vanilla ScaffoldingBlock.getDistance
+        // inherits the scaffold below or is anchored (DISTANCE 0) by a block below that is face-sturdy
+        // upwards. A door / trap door counts even while OPEN, because flipping OPEN changes that face.
+        BlockPos above = pos.above();
+        if (this.world.isLoaded(above) && ComponentCatalog.isScaffolding(this.world.state(above))) {
+            boolean supports = ComponentCatalog.isScaffolding(state)
+                    || this.world.isFaceSturdy(pos, Direction.UP)
+                    || ShapeConnectivity.openTogglesFace(this.world, pos, state, Direction.UP);
+            if (supports) {
+                this.add(result, pos, above, EdgeType.DISTANCE, true, null, null, Direction.UP, null);
             }
         }
 
@@ -576,6 +580,10 @@ public final class ConnectionEngine {
 
     private static Direction[] diagonal(Direction horizontal) {
         return new Direction[]{horizontal.getClockWise(), horizontal.getCounterClockWise()};
+    }
+
+    private static boolean isFenceBarsWall(BlockState state) {
+        return ComponentCatalog.isFence(state) || ComponentCatalog.isIronBars(state) || ComponentCatalog.isWall(state);
     }
 
     private List<BlockPos> railChain(BlockPos start, int max) {

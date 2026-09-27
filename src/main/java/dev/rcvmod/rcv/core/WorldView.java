@@ -50,4 +50,10 @@ public interface WorldView {
     List<BlockPos> railConnections(BlockPos railPos);
 
     boolean isFaceSturdy(BlockPos pos, Direction face);
+
+    /**
+     * Face sturdiness of an arbitrary {@code state} at {@code pos}. Used to probe how a block that
+     * is not currently placed would behave (e.g. a door/trap door with {@code OPEN} flipped).
+     */
+    boolean isFaceSturdy(BlockState state, BlockPos pos, Direction face);
 }

@@ -105,6 +105,11 @@ public final class LevelWorldView implements WorldView {
 
     @Override
     public boolean isFaceSturdy(BlockPos pos, Direction face) {
-        return this.level.getBlockState(pos).isFaceSturdy(this.level, pos, face);
+        return this.isFaceSturdy(this.level.getBlockState(pos), pos, face);
+    }
+
+    @Override
+    public boolean isFaceSturdy(BlockState state, BlockPos pos, Direction face) {
+        return state.isFaceSturdy(this.level, pos, face);
     }
 }

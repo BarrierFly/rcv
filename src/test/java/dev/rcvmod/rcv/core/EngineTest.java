@@ -40,14 +40,10 @@ class EngineTest {
         return new ConnectionEngine(world, options, mode).compute(origin);
     }
 
-    private static boolean hasEdge(ConnectionGraph graph, EdgeType type, BlockPos a, BlockPos b) {
+    private static boolean hasEdge(ConnectionGraph graph, EdgeType type, BlockPos from, BlockPos to) {
         for (GraphEdge edge : graph.edges()) {
-            if (edge.type != type) {
-                continue;
-            }
-            BlockPos from = graph.node(edge.from).pos;
-            BlockPos to = graph.node(edge.to).pos;
-            if ((from.equals(a) && to.equals(b)) || (from.equals(b) && to.equals(a))) {
+            if (edge.type == type && graph.node(edge.from).pos.equals(from)
+                    && graph.node(edge.to).pos.equals(to)) {
                 return true;
             }
         }
@@ -55,17 +51,19 @@ class EngineTest {
     }
 
     @Test
-    void fenceConnectsToOpenTrapDoorInBothDirections() {
-        BlockPos fence = new BlockPos(0, 0, 0);
+    void openTrapDoorInfluencesAdjacentFenceEvenWhenCurrentlyClosed() {
         BlockPos trapDoor = new BlockPos(1, 0, 0);
+        BlockPos fence = new BlockPos(0, 0, 0);
+        // The trap door only becomes sturdy towards the fence when open; it is currently closed.
         FakeWorld world = new FakeWorld()
+                .set(trapDoor, Blocks.OAK_TRAPDOOR.defaultBlockState())
                 .set(fence, Blocks.OAK_FENCE.defaultBlockState())
-                .set(trapDoor, Blocks.OAK_TRAPDOOR.defaultBlockState()
-                        .setValue(BlockStateProperties.OPEN, true))
-                .sturdy(trapDoor);
+                .sturdyWhenOpen(trapDoor, Direction.WEST);
 
-        assertTrue(hasEdge(compute(world, fence, QueryMode.OUT), EdgeType.SHAPE, fence, trapDoor));
-        assertTrue(hasEdge(compute(world, trapDoor, QueryMode.IN), EdgeType.SHAPE, fence, trapDoor));
+        assertTrue(hasEdge(compute(world, trapDoor, QueryMode.OUT), EdgeType.SHAPE, trapDoor, fence));
+        assertTrue(hasEdge(compute(world, fence, QueryMode.IN), EdgeType.SHAPE, trapDoor, fence));
+        assertFalse(hasEdge(compute(world, fence, QueryMode.OUT), EdgeType.SHAPE, trapDoor, fence));
+        assertFalse(hasEdge(compute(world, trapDoor, QueryMode.IN), EdgeType.SHAPE, trapDoor, fence));
     }
 
     @Test
@@ -105,28 +103,46 @@ class EngineTest {
     }
 
     @Test
-    void wallsConnectVerticallyInBothDirections() {
+    void upperWallInfluencesLowerWallOnly() {
         BlockPos lower = new BlockPos(0, 0, 0);
         BlockPos upper = new BlockPos(0, 1, 0);
         FakeWorld world = new FakeWorld()
                 .set(lower, Blocks.COBBLESTONE_WALL.defaultBlockState())
                 .set(upper, Blocks.COBBLESTONE_WALL.defaultBlockState());
 
-        assertTrue(hasEdge(compute(world, lower, QueryMode.OUT), EdgeType.SHAPE, lower, upper));
-        assertTrue(hasEdge(compute(world, upper, QueryMode.IN), EdgeType.SHAPE, lower, upper));
+        assertTrue(hasEdge(compute(world, upper, QueryMode.OUT), EdgeType.SHAPE, upper, lower));
+        assertTrue(hasEdge(compute(world, lower, QueryMode.IN), EdgeType.SHAPE, upper, lower));
+        assertFalse(hasEdge(compute(world, lower, QueryMode.OUT), EdgeType.SHAPE, upper, lower));
+        assertFalse(hasEdge(compute(world, upper, QueryMode.IN), EdgeType.SHAPE, upper, lower));
     }
 
     @Test
-    void scaffoldingDependsOnBlockBelowInBothDirections() {
+    void horizontalWallsDoNotShareShapeDependency() {
+        BlockPos a = new BlockPos(0, 0, 0);
+        BlockPos b = new BlockPos(1, 0, 0);
+        FakeWorld world = new FakeWorld()
+                .set(a, Blocks.COBBLESTONE_WALL.defaultBlockState())
+                .set(b, Blocks.COBBLESTONE_WALL.defaultBlockState());
+
+        assertFalse(hasEdge(compute(world, a, QueryMode.OUT), EdgeType.SHAPE, a, b));
+        assertFalse(hasEdge(compute(world, b, QueryMode.OUT), EdgeType.SHAPE, a, b));
+    }
+
+    @Test
+    void openTrapDoorSupportsScaffoldingAbove() {
         BlockPos support = new BlockPos(0, 0, 0);
         BlockPos scaffold = new BlockPos(0, 1, 0);
+        // Open (so not currently sturdy upwards), but closing it would make it sturdy.
         FakeWorld world = new FakeWorld()
-                .set(support, Blocks.OAK_TRAPDOOR.defaultBlockState())
-                .sturdy(support)
-                .set(scaffold, Blocks.SCAFFOLDING.defaultBlockState());
+                .set(support, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                        .setValue(BlockStateProperties.OPEN, true))
+                .set(scaffold, Blocks.SCAFFOLDING.defaultBlockState())
+                .sturdyWhenClosed(support, Direction.UP);
 
-        assertTrue(hasEdge(compute(world, scaffold, QueryMode.OUT), EdgeType.DISTANCE, scaffold, support));
-        assertTrue(hasEdge(compute(world, scaffold, QueryMode.IN), EdgeType.DISTANCE, scaffold, support));
+        assertTrue(hasEdge(compute(world, support, QueryMode.OUT), EdgeType.DISTANCE, support, scaffold));
+        assertTrue(hasEdge(compute(world, scaffold, QueryMode.IN), EdgeType.DISTANCE, support, scaffold));
+        assertFalse(hasEdge(compute(world, scaffold, QueryMode.OUT), EdgeType.DISTANCE, support, scaffold));
+        assertFalse(hasEdge(compute(world, support, QueryMode.IN), EdgeType.DISTANCE, support, scaffold));
     }
 
     @Test
@@ -169,7 +185,9 @@ class EngineTest {
 
         private final Map<BlockPos, BlockState> states = new HashMap<>();
         private final Set<BlockPos> conductors = new HashSet<>();
-        private final Set<BlockPos> sturdy = new HashSet<>();
+        private final Set<BlockPos> sturdyAlways = new HashSet<>();
+        private final Map<BlockPos, Set<Direction>> sturdyWhenOpen = new HashMap<>();
+        private final Map<BlockPos, Set<Direction>> sturdyWhenClosed = new HashMap<>();
 
         FakeWorld set(BlockPos pos, BlockState state) {
             this.states.put(pos, state);
@@ -182,7 +200,17 @@ class EngineTest {
         }
 
         FakeWorld sturdy(BlockPos pos) {
-            this.sturdy.add(pos);
+            this.sturdyAlways.add(pos);
+            return this;
+        }
+
+        FakeWorld sturdyWhenOpen(BlockPos pos, Direction... faces) {
+            this.sturdyWhenOpen.computeIfAbsent(pos, key -> new HashSet<>()).addAll(List.of(faces));
+            return this;
+        }
+
+        FakeWorld sturdyWhenClosed(BlockPos pos, Direction... faces) {
+            this.sturdyWhenClosed.computeIfAbsent(pos, key -> new HashSet<>()).addAll(List.of(faces));
             return this;
         }
 
@@ -253,7 +281,18 @@ class EngineTest {
 
         @Override
         public boolean isFaceSturdy(BlockPos pos, Direction face) {
-            return this.sturdy.contains(pos);
+            return isFaceSturdy(state(pos), pos, face);
+        }
+
+        @Override
+        public boolean isFaceSturdy(BlockState state, BlockPos pos, Direction face) {
+            if (this.sturdyAlways.contains(pos)) {
+                return true;
+            }
+            if (state.getOptionalValue(BlockStateProperties.OPEN).orElse(false)) {
+                return this.sturdyWhenOpen.getOrDefault(pos, Set.of()).contains(face);
+            }
+            return this.sturdyWhenClosed.getOrDefault(pos, Set.of()).contains(face);
         }
     }
 }
