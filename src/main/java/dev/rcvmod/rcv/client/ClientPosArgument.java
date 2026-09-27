@@ -5,7 +5,6 @@ import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
-import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import java.util.Collection;
@@ -19,10 +18,8 @@ import net.minecraft.world.phys.Vec3;
 /**
  * A tiny, version-portable replacement for {@code BlockPosArgument} for client commands, supporting
  * absolute integers and {@code ~} relative coordinates (resolved against the client player later).
- * Implements {@link SuggestionProvider} so Brigadier still offers coordinate completion.
  */
-public final class ClientPosArgument
-        implements ArgumentType<ClientPosArgument.Pos>, SuggestionProvider<FabricClientCommandSource> {
+public final class ClientPosArgument implements ArgumentType<ClientPosArgument.Pos> {
 
     private static final SimpleCommandExceptionType ERROR = new SimpleCommandExceptionType(
             Component.literal("Expected coordinates"));
@@ -48,10 +45,16 @@ public final class ClientPosArgument
         return new Pos(x, y, z, relativeX, relativeY, relativeZ);
     }
 
+    /**
+     * Brigadier 1.1 exposes suggestions through {@link ArgumentType#listSuggestions}; this offers
+     * {@code ~} and the player's current coordinate for each of the three components.
+     */
     @Override
-    public CompletableFuture<Suggestions> getSuggestions(CommandContext<FabricClientCommandSource> context,
-                                                         SuggestionsBuilder builder) {
-        Vec3 position = context.getSource().getPosition();
+    public <S> CompletableFuture<Suggestions> listSuggestions(CommandContext<S> context, SuggestionsBuilder builder) {
+        if (!(context.getSource() instanceof FabricClientCommandSource source)) {
+            return builder.buildFuture();
+        }
+        Vec3 position = source.getPosition();
         String remaining = builder.getRemaining();
         int tokenStart = remaining.lastIndexOf(' ') + 1;
         int index = 0;

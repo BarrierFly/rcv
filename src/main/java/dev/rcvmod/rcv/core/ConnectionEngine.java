@@ -73,7 +73,7 @@ public final class ConnectionEngine {
             }
             List<Candidate> candidates = this.mode == QueryMode.OUT ? this.outgoing(pos) : this.incoming(pos);
             for (Candidate c : candidates) {
-                BlockPos other = this.mode == QueryMode.OUT ? c.to() : c.from();
+                BlockPos other = c.from().equals(pos) ? c.to() : c.from();
                 if (!this.world.isLoaded(other)) {
                     continue;
                 }
@@ -148,9 +148,13 @@ public final class ConnectionEngine {
             Direction dirRtoA = k.getOpposite();
 
             if (ComponentCatalog.isWire(rs)) {
-                if (wireAccepts(state, dirRtoA)) {
-                    boolean undirected = ComponentCatalog.isWire(state);
-                    this.add(result, pos, r, EdgeType.CIRCUIT, !undirected, null, null, dirRtoA, null);
+                if (ComponentCatalog.isWire(state)) {
+                    // Wire <-> wire only connects horizontally (climbing is modelled via the supporting block).
+                    if (k.getAxis() != Direction.Axis.Y) {
+                        this.addUndirected(result, pos, r, EdgeType.CIRCUIT, null, dirRtoA);
+                    }
+                } else if (wireAccepts(state, dirRtoA) && emitsToward(state, k)) {
+                    this.add(result, pos, r, EdgeType.CIRCUIT, true, null, null, dirRtoA, null);
                 }
                 continue;
             }
@@ -158,10 +162,10 @@ public final class ConnectionEngine {
             if (ComponentCatalog.isDiode(rs)) {
                 Direction f = ComponentCatalog.inputFacing(rs);
                 if (f != null) {
-                    if (k == f.getOpposite() && (emits || ComponentCatalog.isWire(state))) {
+                    if (k == f.getOpposite() && (emits || ComponentCatalog.isWire(state)) && emitsToward(state, k)) {
                         this.add(result, pos, r, EdgeType.CIRCUIT, true, null, null, f, null);
                     } else if (ComponentCatalog.isComparator(rs) && (k == f.getClockWise() || k == f.getCounterClockWise())
-                            && (emits || ComponentCatalog.isWire(state))) {
+                            && (emits || ComponentCatalog.isWire(state)) && emitsToward(state, k)) {
                         String port = k == f.getClockWise() ? "SIDE_L" : "SIDE_R";
                         this.add(result, pos, r, EdgeType.COMPARATOR_SIDE, true, null, null, f, port);
                     }
@@ -178,6 +182,21 @@ public final class ConnectionEngine {
 
             if (emits && emitsToward(state, k) && ComponentCatalog.isConsumer(rs)) {
                 this.add(result, pos, r, EdgeType.DIRECT_ACTIVATION, true, null, null, k, null);
+            }
+        }
+
+        // Wire climbing: a wire connects diagonally up to a wire sitting on top of a solid block.
+        if (ComponentCatalog.isWire(state)) {
+            for (Direction k : Direction.Plane.HORIZONTAL) {
+                BlockPos mid = pos.relative(k);
+                BlockPos up = mid.above();
+                if (!this.world.isLoaded(mid) || !this.world.isLoaded(up)) {
+                    continue;
+                }
+                if (this.world.isFaceSturdy(mid, Direction.UP)
+                        && ComponentCatalog.isWire(this.world.state(up))) {
+                    this.addUndirected(result, pos, up, EdgeType.CIRCUIT, null, k);
+                }
             }
         }
 
@@ -400,7 +419,7 @@ public final class ConnectionEngine {
                     }
                     BlockPos pred = pos.offset(dx, dy, dz);
                     for (Candidate c : this.outgoing(pred)) {
-                        if (c.to().equals(pos)) {
+                        if (c.to().equals(pos) || (!c.directed() && c.from().equals(pos))) {
                             result.add(c);
                         }
                     }
@@ -510,10 +529,14 @@ public final class ConnectionEngine {
             Direction f = ComponentCatalog.inputFacing(target);
             return f != null && dirFromConductorToTarget == f.getOpposite();
         }
-        if (ComponentCatalog.isRedstoneTorch(target)) {
-            return true;
+        Direction attach = ComponentCatalog.torchAttach(target);
+        if (attach != null) {
+            // A torch is only affected when the charged conductor is the block it is attached to.
+            return dirFromConductorToTarget == attach.getOpposite();
         }
-        return ComponentCatalog.isResponsive(target);
+        // Only blocks that actually react to power (or redstone wire) may be charged; otherwise a lever,
+        // button, torch, ... next to a strongly powered conductor would get a bogus CHARGE edge.
+        return ComponentCatalog.isConsumer(target) || ComponentCatalog.isWire(target);
     }
 
     private static boolean neighbourAffectsConnectivity(BlockPos a, BlockState as, BlockPos b, BlockState bs,

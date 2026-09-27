@@ -106,6 +106,17 @@ public final class ComponentCatalog {
         return state.getBlock() instanceof RedstoneTorchBlock || state.getBlock() instanceof RedstoneWallTorchBlock;
     }
 
+    /** Direction from a redstone torch towards the block it is attached to, or {@code null}. */
+    public static @Nullable Direction torchAttach(BlockState state) {
+        if (state.getBlock() instanceof RedstoneWallTorchBlock) {
+            return state.getValue(HorizontalDirectionalBlock.FACING).getOpposite();
+        }
+        if (state.getBlock() instanceof RedstoneTorchBlock) {
+            return Direction.DOWN;
+        }
+        return null;
+    }
+
     public static boolean isPiston(BlockState state) {
         return state.getBlock() instanceof PistonBaseBlock;
     }
