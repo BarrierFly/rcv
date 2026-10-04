@@ -1,6 +1,7 @@
 final String mcVersion = project.minecraft_version
 final boolean unobfuscated = mcVersion.startsWith('26')
-final int javaVersion = unobfuscated ? 25 : 21
+// 1.19.4 / 1.20.1 run on Java 17, 1.21.x on 21 and 26.x on 25; see versions/<v>/gradle.properties.
+final int javaVersion = project.java_version as int
 
 apply plugin: 'maven-publish'
 apply plugin: unobfuscated ? 'net.fabricmc.fabric-loom' : 'net.fabricmc.fabric-loom-remap'
@@ -55,11 +56,6 @@ sourceSets {
     }
 }
 
-if (unobfuscated) {
-    // GuiGraphics was replaced by GuiGraphicsExtractor in 26.x; the shared HUD body does not compile there.
-    sourceSets.main.java.exclude 'dev/rcvmod/rcv/client/RcvHud.java'
-}
-
 loom {
     runConfigs.configureEach {
         runDir = rootProject.file('run')
@@ -88,7 +84,8 @@ java {
 processResources {
     def modProperties = [
             version             : project.mod_version,
-            minecraft_dependency: project.minecraft_dependency
+            minecraft_dependency: project.minecraft_dependency,
+            java_dependency     : ">=${javaVersion}"
     ]
     inputs.properties(modProperties)
     filesMatching('fabric.mod.json') {

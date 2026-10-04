@@ -5,6 +5,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.network.chat.Component;
+import org.joml.Vector3f;
 
 public final class ServerCompat {
 
@@ -15,11 +16,15 @@ public final class ServerCompat {
         return source.hasPermission(2);
     }
 
+    /** 1.19.4 only has the eager {@code sendSuccess(Component, boolean)} overload. */
     public static void sendSuccess(CommandSourceStack source, Supplier<Component> message, boolean broadcast) {
-        source.sendSuccess(message, broadcast);
+        source.sendSuccess(message.get(), broadcast);
     }
 
     public static ParticleOptions dust(int color) {
-        return new DustParticleOptions(color, 1.0F);
+        float r = ((color >> 16) & 0xFF) / 255.0f;
+        float g = ((color >> 8) & 0xFF) / 255.0f;
+        float b = (color & 0xFF) / 255.0f;
+        return new DustParticleOptions(new Vector3f(r, g, b), 1.0F);
     }
 }

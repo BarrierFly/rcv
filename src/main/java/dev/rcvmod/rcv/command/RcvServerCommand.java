@@ -65,8 +65,9 @@ public final class RcvServerCommand {
                 .then(Commands.literal("refresh").executes(RcvServerCommand::refresh))
                 .then(Commands.literal("reload").executes(RcvServerCommand::reload))
                 .then(Commands.literal("types").executes(ctx -> {
-                    ctx.getSource().sendSuccess(() -> Component.translatable("rcv.types.header"), false);
-                    ctx.getSource().sendSuccess(RcvCommandUtil::typeList, false);
+                    ServerCompat.sendSuccess(ctx.getSource(),
+                            () -> Component.translatable("rcv.types.header"), false);
+                    ServerCompat.sendSuccess(ctx.getSource(), RcvCommandUtil::typeList, false);
                     return 1;
                 })));
     }
@@ -114,16 +115,17 @@ public final class RcvServerCommand {
         ConnectionGraph graph = new ConnectionEngine(world, options, mode).compute(origin);
 
         if (graph.edgeCount() == 0) {
-            source.sendSuccess(() -> Component.translatable("rcv.command.empty", parsed.depth()), false);
+            ServerCompat.sendSuccess(source, () -> Component.translatable("rcv.command.empty", parsed.depth()),
+                    false);
         } else {
-            source.sendSuccess(() -> Component.translatable(mode == QueryMode.IN ? "rcv.command.in.header"
+            ServerCompat.sendSuccess(source, () -> Component.translatable(mode == QueryMode.IN ? "rcv.command.in.header"
                     : "rcv.command.out.header", origin.toShortString()), false);
-            source.sendSuccess(() -> Component.translatable("rcv.command.summary", graph.nodeCount(), graph.edgeCount(),
-                    parsed.depth()), false);
-            RcvCommandUtil.edgeLines(graph).forEach(line -> source.sendSuccess(() -> line, false));
+            ServerCompat.sendSuccess(source, () -> Component.translatable("rcv.command.summary", graph.nodeCount(),
+                    graph.edgeCount(), parsed.depth()), false);
+            RcvCommandUtil.edgeLines(graph).forEach(line -> ServerCompat.sendSuccess(source, () -> line, false));
             if (graph.truncated()) {
-                source.sendSuccess(() -> Component.translatable("rcv.command.truncated", graph.nodeCount(),
-                        graph.edgeCount()), false);
+                ServerCompat.sendSuccess(source, () -> Component.translatable("rcv.command.truncated",
+                        graph.nodeCount(), graph.edgeCount()), false);
             }
             renderParticles(level, graph, parsed.mask());
         }
@@ -162,7 +164,7 @@ public final class RcvServerCommand {
         if (player != null) {
             LAST_QUERY.remove(player.getUUID());
         }
-        ctx.getSource().sendSuccess(() -> Component.translatable("rcv.command.clear"), false);
+        ServerCompat.sendSuccess(ctx.getSource(), () -> Component.translatable("rcv.command.clear"), false);
         return 1;
     }
 
@@ -181,7 +183,7 @@ public final class RcvServerCommand {
 
     private static int reload(CommandContext<CommandSourceStack> ctx) {
         RcvServerConfig.reload();
-        ctx.getSource().sendSuccess(() -> Component.translatable("rcv.command.reload"), true);
+        ServerCompat.sendSuccess(ctx.getSource(), () -> Component.translatable("rcv.command.reload"), true);
         return 1;
     }
 }

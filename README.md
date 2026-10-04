@@ -9,8 +9,8 @@ RCV visualises the **topological** upstream inputs (`in`) and downstream outputs
 component. It only answers "is there a connection", and deliberately does **not** simulate timing or
 signal strength, nor detect faults.
 
-- 平台 / Platform: **Fabric**, Java **21**（`26.x` 需 Java **25**）
-- 支持版本 / Versions: **1.21.1 / 1.21.10 / 1.21.11 / 26.3**（见下方构建）
+- 平台 / Platform: **Fabric**, Java **17 / 21**（`26.x` 需 Java **25**）
+- 支持版本 / Versions: **1.19.4 / 1.20.1 / 1.21.1 / 1.21.10 / 1.21.11 / 26.3**（见下方构建）
 - Mod id: `rcv`；包名 `dev.rcvmod.rcv`
 - 许可 / License: **LGPL-3.0**（见 [LICENSE](LICENSE)）
 
@@ -98,10 +98,10 @@ signal strength, nor detect faults.
 多版本工程（replaymod-preprocessor 风格的子工程，`src/main` 共享 + `src/versions/<v>` 版本差异）。
 
 ```bash
-./gradlew buildAndGather        # 构建全部 4 个版本并汇总到 build/libs
+./gradlew buildAndGather        # 构建全部 6 个版本并汇总到 build/libs
 ./gradlew :1.21.11:build        # 只构建某个版本
 ./gradlew :26.3:build           # 26.x 需要 JDK 25（Gradle toolchain 自动下载）
-./gradlew :1.21.11:test         # 某版本的核心模型单测
+./gradlew :1.19.4:test          # 某版本的核心模型单测
 ./gradlew :1.21.11:runClient    # 开发客户端（运行目录为根目录 run/）
 ```
 
@@ -110,7 +110,8 @@ Windows PowerShell 使用 `.\gradlew.bat`。产物：`build/libs/rcv-mc<version>
 ## 已知限制 / Known limitations
 
 - 服务端权威的图下发（协议 v1 分块传输 `rcv:graph`）尚未实现：`S+C` 下由客户端本地计算。
-- **26.3** 尚未实现 HUD 图例（新 HUD 使用 `GuiGraphicsExtractor` 抽取式 API）；渲染与命令正常。
+- 旧版本（1.19.4 / 1.20.1）没有 `crafter`、铜灯泡（均为 1.21）与校频幽匿感测体（1.20），
+  这些方块在对应版本的 `ComponentCatalog` 里直接视为“不是元件”。
 - `compat` 复刻的红石线 / 中继器 / 比较器判定需与逐版本真实行为做游戏内对照（规划附录 D3）。
 - PP `all` 档、NC `all` 档可能产生大量边，受节点 / 边上限保护。
 - 活塞绑定块的 NC / PP 边由活塞方生成，**反向（IN）搜索不保证可查**（差异仅在有活塞源、

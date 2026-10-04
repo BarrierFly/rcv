@@ -1,16 +1,14 @@
 package dev.rcvmod.rcv.core;
 
+import dev.rcvmod.rcv.version.BlockCompat;
 import java.util.EnumSet;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.BaseRailBlock;
 import net.minecraft.world.level.block.BellBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ButtonBlock;
-import net.minecraft.world.level.block.CalibratedSculkSensorBlock;
 import net.minecraft.world.level.block.CommandBlock;
 import net.minecraft.world.level.block.ComparatorBlock;
-import net.minecraft.world.level.block.CopperBulbBlock;
-import net.minecraft.world.level.block.CrafterBlock;
 import net.minecraft.world.level.block.DaylightDetectorBlock;
 import net.minecraft.world.level.block.DetectorRailBlock;
 import net.minecraft.world.level.block.DiodeBlock;
@@ -199,8 +197,8 @@ public final class ComponentCatalog {
                 || state.getBlock() instanceof NoteBlock
                 || state.getBlock() instanceof CommandBlock
                 || state.getBlock() instanceof HopperBlock
-                || state.getBlock() instanceof CrafterBlock
-                || state.getBlock() instanceof CopperBulbBlock
+                || BlockCompat.isCrafter(state)
+                || BlockCompat.isCopperBulb(state)
                 || state.getBlock() instanceof BellBlock;
     }
 
@@ -263,7 +261,7 @@ public final class ComponentCatalog {
     }
 
     public static boolean isSculkSensor(BlockState state) {
-        return state.getBlock() instanceof SculkSensorBlock || state.getBlock() instanceof CalibratedSculkSensorBlock;
+        return state.getBlock() instanceof SculkSensorBlock || BlockCompat.isCalibratedSculkSensor(state);
     }
 
     /** FACING for the directional families RCV cares about, or {@code null} when absent. */
