@@ -13,8 +13,10 @@ tasks.register('buildAndGather') {
         delete fileTree(buildLibs(rootProject)) { include '*' }
         subprojects {
             copy {
+                // Gradle's jar task leaves the previous archive behind when the archive name
+                // changes, so a mod_version bump would otherwise pile old jars up in build/libs.
                 from(buildLibs(project)) {
-                    include '*.jar'
+                    include "*-${project.mod_version}.jar"
                     exclude '*-dev.jar', '*-sources.jar', '*-shadow.jar'
                 }
                 into buildLibs(rootProject)
