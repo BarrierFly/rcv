@@ -8,6 +8,14 @@ import java.util.Locale;
  * <p>The enum order encodes the merge priority (see {@link #priority()}): when two edges share the
  * same {@code (from, to)} pair only the highest priority one is kept. {@link #CIRCUIT},
  * {@link #COMPARATOR_SIDE} and {@link #REPEATER_SIDE} intentionally share priority 2.
+ *
+ * <p>Constants are only ever appended at the end: {@link #byOrdinal} and
+ * {@link TypeMask#truncatedMask} encode types by ordinal, so inserting in the middle would shift
+ * every existing ordinal. The priority <em>values</em> are independent of that order and were
+ * renumbered once ({@code DUST_TRAPDOOR} took the free slot 12, pushing NC/PP to 13/14) so that
+ * the new type outranks PP - with {@code PP=ALL} the trap-door -> wire pair already carries a PP
+ * edge, and same-pair merging would otherwise drop the new type entirely. The relative order of
+ * the pre-existing priorities is unchanged, so no existing merge result changes.
  */
 public enum EdgeType {
     DIRECT_ACTIVATION(1, "direct_activation"),
@@ -23,8 +31,9 @@ public enum EdgeType {
     RAIL(9, "rail"),
     SHAPE(10, "shape"),
     DISTANCE(11, "distance"),
-    NC(12, "nc"),
-    PP(13, "pp");
+    NC(13, "nc"),
+    PP(14, "pp"),
+    DUST_TRAPDOOR(12, "dust_trapdoor");
 
     private final int priority;
     private final String id;

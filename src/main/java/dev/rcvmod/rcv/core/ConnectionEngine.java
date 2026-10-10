@@ -23,9 +23,7 @@ import net.minecraft.world.level.block.RedstoneWallTorchBlock;
 import net.minecraft.world.level.block.TripWireHookBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
-import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.block.state.properties.RailShape;
 import net.minecraft.world.level.block.state.properties.RedstoneSide;
 import net.minecraft.world.level.block.state.properties.WallSide;
@@ -42,6 +40,7 @@ public final class ConnectionEngine {
     private final QueryMode mode;
     private final ConnectionGraph graph;
     private final Map<BlockPos, List<Candidate>> outgoingCache = new HashMap<>();
+    private final Map<BlockPos, Map<Direction, RedstoneSide>> wireSideCache = new HashMap<>();
     private final Set<BlockPos> visited = new HashSet<>();
 
     public ConnectionEngine(WorldView world, GraphOptions options, QueryMode mode) {
@@ -80,6 +79,9 @@ public final class ConnectionEngine {
             }
             List<Candidate> candidates = this.mode == QueryMode.OUT ? this.outgoing(pos) : this.incoming(pos);
             for (Candidate c : candidates) {
+                // For a junction candidate `from` is the trap door (a real position) and `to` the
+                // downstream block, so `other` is always a real position and only that one is queued;
+                // the virtual midpoint itself never enters the BFS (see addJunctionNode).
                 BlockPos other = c.from().equals(pos) ? c.to() : c.from();
                 if (!this.world.isLoaded(other)) {
                     continue;
@@ -92,7 +94,10 @@ public final class ConnectionEngine {
                     this.graph.markTruncated();
                     return this.graph;
                 }
-                int fromId = this.addNodeFor(c.from(), c.targetKind(), node.depth + 1);
+                int fromId = c.junction() != null
+                        ? this.graph.addJunctionNode(c.junction().trapDoor(), c.junction().wire(), c.from(),
+                                node.depth + 1)
+                        : this.addNodeFor(c.from(), c.targetKind(), node.depth + 1);
                 int toId = this.addNodeFor(c.to(), c.targetKind(), node.depth + 1);
                 for (BlockPos via : c.via()) {
                     this.graph.addNode(via, ComponentCatalog.blockId(this.world.state(via)), NodeKind.VIA,
@@ -382,6 +387,56 @@ public final class ConnectionEngine {
             BlockPos below = pos.below();
             if (this.world.isLoaded(below) && ComponentCatalog.isWall(this.world.state(below))) {
                 this.add(result, pos, below, EdgeType.SHAPE, true, null, null, Direction.DOWN, null);
+            }
+        }
+
+        // DUST_TRAPDOOR (directed, trap door -> wire). Both segments express a *control* relation -
+        // "this trap door decides which ways that wire connects" - so they exist whether the door is
+        // open or closed; only the flip differs, and the flip is what is being probed here.
+        //
+        //   front  T -> W   the OPEN flip cuts the wire's connection towards the door
+        //   back   J -> X   the OPEN flip opens the wire's two perpendicular sides
+        //
+        // Note the opposite polarity of the two: vanilla's back-fill segment promotes NONE -> SIDE
+        // based on the very side the trap door controls, so opening the door is what turns those sides
+        // on. The back segment hangs off the midpoint node J because recording it as W -> X would
+        // collide with the wire's own edge to X and same-pair merging would drop one of the two.
+        if (this.options.allows(EdgeType.DUST_TRAPDOOR)) {
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                if (!DustTrapdoor.gate(this.world, pos, d)) {
+                    continue;
+                }
+                BlockPos wire = pos.relative(d);
+                Map<Direction, RedstoneSide> closed = DustTrapdoor.wireSides(this.world, wire,
+                        this.options.dustTrapdoorLegacy, pos, false);
+                Map<Direction, RedstoneSide> open = DustTrapdoor.wireSides(this.world, wire,
+                        this.options.dustTrapdoorLegacy, pos, true);
+                Direction towardsDoor = d.getOpposite();
+                if (closed.get(towardsDoor) != open.get(towardsDoor)) {
+                    this.add(result, pos, wire, EdgeType.DUST_TRAPDOOR, true, null, null, d, null);
+                }
+                // The two segments are independent: they are read off different sides of the same
+                // recomputed map, so a door whose own side is masked by the back-fill can still gate
+                // the perpendicular ones (§2.5 scenario A).
+                for (Direction m : Direction.Plane.HORIZONTAL) {
+                    if (m == d || m == d.getOpposite() || closed.get(m) == open.get(m)) {
+                        continue;
+                    }
+                    BlockPos downstream = wire.relative(m);
+                    if (!this.world.isLoaded(downstream)) {
+                        continue;
+                    }
+                    BlockState downstreamState = this.world.state(downstream);
+                    // Wires, diodes and observers already read as SIDE through shouldConnectTo, so they
+                    // can never flip; skipping them only saves a world lookup.
+                    if (ComponentCatalog.isWire(downstreamState) || ComponentCatalog.isDiode(downstreamState)
+                            || ComponentCatalog.isObserver(downstreamState)) {
+                        continue;
+                    }
+                    if (this.world.isConductor(downstream) || ComponentCatalog.isConsumer(downstreamState)) {
+                        this.addFromJunction(result, pos, wire, downstream, EdgeType.DUST_TRAPDOOR, m);
+                    }
+                }
             }
         }
 
@@ -712,7 +767,7 @@ public final class ConnectionEngine {
         if (ComponentCatalog.isPoweredRail(state) && this.options.allows(EdgeType.RAIL)) {
             for (BlockPos r : this.railChain(pos, this.options.railRange)) {
                 if (!r.equals(pos)) {
-                    result.add(new Candidate(r, pos, EdgeType.RAIL, true, List.of(), null, null, null));
+                    result.add(new Candidate(r, pos, EdgeType.RAIL, true, List.<BlockPos>of(), null, null, null, null));
                 }
             }
         }
@@ -793,6 +848,15 @@ public final class ConnectionEngine {
     /**
      * Vanilla redstone wire emits down into the block it sits on and horizontally through every
      * connected side (its "pointing"), but never straight up.
+     *
+     * <p>The connection is <em>recomputed</em> exactly as {@code RedStoneWireBlock#getSignal} does,
+     * rather than read off the stored {@code *_REDSTONE} properties. The two agree in a settled world,
+     * because the stored properties are what {@code getConnectionState} produced; they disagree while
+     * the wire's shape is stale (a skipped shape update, floating dust, a transient in the
+     * instant-update loop). Vanilla asks the live question, so RCV has to as well - otherwise a
+     * {@code DUST_TRAPDOOR} edge and the {@code DIRECT_ACTIVATION} edge next to it would be judged on
+     * two different data sets and the graph could claim the door controls the wire while showing no
+     * supply, or the other way round.
      */
     private boolean wireEmitsToward(BlockPos wirePos, Direction k) {
         if (k == Direction.DOWN) {
@@ -801,22 +865,17 @@ public final class ConnectionEngine {
         if (k == Direction.UP) {
             return false;
         }
-        EnumProperty<RedstoneSide> property = wireProperty(k);
-        if (property == null) {
-            return false;
-        }
-        BlockState wire = this.world.state(wirePos);
-        return wire.hasProperty(property) && wire.getValue(property).isConnected();
+        return this.wireSides(wirePos).get(k).isConnected();
     }
 
-    private static @Nullable EnumProperty<RedstoneSide> wireProperty(Direction k) {
-        return switch (k) {
-            case NORTH -> BlockStateProperties.NORTH_REDSTONE;
-            case SOUTH -> BlockStateProperties.SOUTH_REDSTONE;
-            case EAST -> BlockStateProperties.EAST_REDSTONE;
-            case WEST -> BlockStateProperties.WEST_REDSTONE;
-            default -> null;
-        };
+    /**
+     * The wire's four live connection sides, memoised per engine run: {@link #wireEmitsToward} asks
+     * for the same wire once per neighbouring direction, and recomputing costs four full
+     * {@code getConnectingSide} evaluations.
+     */
+    private Map<Direction, RedstoneSide> wireSides(BlockPos wirePos) {
+        return this.wireSideCache.computeIfAbsent(wirePos.immutable(),
+                pos -> DustTrapdoor.wireSides(this.world, pos, this.options.dustTrapdoorLegacy));
     }
 
     private static boolean canReceiveCharge(BlockState target, Direction dirFromConductorToTarget,
@@ -853,7 +912,26 @@ public final class ConnectionEngine {
             return;
         }
         list.add(new Candidate(from.immutable(), to.immutable(), type, directed,
-                via == null ? List.of() : via, dir, port, targetKind));
+                via == null ? List.of() : via, dir, port, targetKind, null));
+    }
+
+    /**
+     * Adds a candidate that starts at the {@code trapDoor}-{@code wire} midpoint rather than at
+     * {@code from} ({@code = trapDoor}).
+     */
+    private void addFromJunction(List<Candidate> list, BlockPos trapDoor, BlockPos wire, BlockPos to,
+                                 EdgeType type, Direction dir) {
+        if (!this.options.allows(type)) {
+            return;
+        }
+        if (to.equals(trapDoor)) {
+            return;
+        }
+        if (!this.world.isLoaded(trapDoor) || !this.world.isLoaded(to)) {
+            return;
+        }
+        list.add(new Candidate(trapDoor.immutable(), to.immutable(), type, true, List.of(), dir, null, null,
+                new Junction(trapDoor.immutable(), wire.immutable())));
     }
 
     private void addUndirected(List<Candidate> list, BlockPos a, BlockPos b, EdgeType type,
@@ -879,6 +957,15 @@ public final class ConnectionEngine {
     }
 
     private record Candidate(BlockPos from, BlockPos to, EdgeType type, boolean directed, List<BlockPos> via,
-                             @Nullable Direction dir, @Nullable String port, @Nullable NodeKind targetKind) {
+                              @Nullable Direction dir, @Nullable String port, @Nullable NodeKind targetKind,
+                              @Nullable Junction junction) {
+    }
+
+    /**
+     * Marks a candidate whose <em>origin</em> is the virtual midpoint between two blocks rather than
+     * {@code from}. Only used by {@link EdgeType#DUST_TRAPDOOR}'s back segment, which must not share
+     * an edge pair with the wire's own edge to the same target.
+     */
+    private record Junction(BlockPos trapDoor, BlockPos wire) {
     }
 }

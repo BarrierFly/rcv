@@ -1,6 +1,7 @@
 package dev.rcvmod.rcv.client;
 
 import dev.rcvmod.rcv.config.RcvConfig;
+import dev.rcvmod.rcv.core.DustTrapdoorMode;
 import dev.rcvmod.rcv.core.EdgeType;
 import dev.rcvmod.rcv.core.GraphOptions;
 import dev.rcvmod.rcv.core.NcMode;
@@ -68,6 +69,14 @@ public final class RcvConfigScreen {
                 .setSelections(List.of(NcMode.OFF.name(), NcMode.ALL.name()))
                 .setDefaultValue(NcMode.OFF.name())
                 .setSaveConsumer(value -> config.ncMode = value)
+                .build());
+        general.addEntry(entries.startStringDropdownMenu(Component.translatable("rcv.config.dust_trapdoor"),
+                        config.dustTrapdoorMode().name())
+                .setSelections(List.of(DustTrapdoorMode.AUTO.name(), DustTrapdoorMode.ON.name(),
+                        DustTrapdoorMode.OFF.name()))
+                .setDefaultValue(DustTrapdoorMode.AUTO.name())
+                .setTooltip(Component.translatable("rcv.config.dust_trapdoor.tooltip"))
+                .setSaveConsumer(value -> config.dustTrapdoor = value)
                 .build());
 
         ConfigCategory types = builder.getOrCreateCategory(Component.translatable("rcv.config.types"));

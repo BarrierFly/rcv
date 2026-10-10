@@ -35,6 +35,8 @@
   "rcv.config.wand_item": "魔杖物品",
   "rcv.config.pp_mode": "PP 模式",
   "rcv.config.nc_mode": "NC 模式",
+  "rcv.config.dust_trapdoor": "粉板连接门控",
+  "rcv.config.dust_trapdoor.tooltip": "活板门是否仍能决定相邻红石线的接通方式（1.20 前行为）。AUTO 会探测当前游戏；ON/OFF 强制指定。",
   "rcv.edge.direct_activation": "激活连接",
   "rcv.edge.circuit": "电路连接",
   "rcv.edge.comparator_side": "比较器侧输入",
@@ -49,5 +51,6 @@
   "rcv.edge.shape": "形状连接",
   "rcv.edge.distance": "距离连接",
   "rcv.edge.nc": "NC 更新",
-  "rcv.edge.pp": "PP 更新"
+  "rcv.edge.pp": "PP 更新",
+  "rcv.edge.dust_trapdoor": "粉板连接"
 }

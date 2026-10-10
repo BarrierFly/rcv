@@ -3,6 +3,8 @@ package dev.rcvmod.rcv.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import dev.rcvmod.rcv.RCV;
+import dev.rcvmod.rcv.core.DustTrapdoorEra;
+import dev.rcvmod.rcv.core.DustTrapdoorMode;
 import dev.rcvmod.rcv.core.GraphOptions;
 import dev.rcvmod.rcv.core.NcMode;
 import dev.rcvmod.rcv.core.PpMode;
@@ -27,6 +29,8 @@ public final class RcvServerConfig {
     public int maxEdges = GraphOptions.MAX_EDGES;
     public String ppMode = PpMode.OBSERVER_ONLY.name();
     public String ncMode = NcMode.OFF.name();
+    /** {@code auto|on|off}; see {@link DustTrapdoorMode}. */
+    public String dustTrapdoor = DustTrapdoorMode.AUTO.name();
     public int railRange = 8;
 
     public static RcvServerConfig get() {
@@ -39,6 +43,8 @@ public final class RcvServerConfig {
     /** Hot reload from disk ({@code /rcv reload}). */
     public static RcvServerConfig reload() {
         instance = load();
+        // The probe result is a property of the loaded classes, which a config change can influence.
+        DustTrapdoorEra.reset();
         return instance;
     }
 
@@ -48,6 +54,15 @@ public final class RcvServerConfig {
 
     public NcMode ncMode() {
         return NcMode.valueOf(this.ncMode);
+    }
+
+    public DustTrapdoorMode dustTrapdoorMode() {
+        return DustTrapdoorMode.parse(this.dustTrapdoor);
+    }
+
+    /** Whether dust-trapdoor edges are computed on the server side. */
+    public boolean dustTrapdoorLegacy() {
+        return DustTrapdoorEra.legacy(this.dustTrapdoorMode());
     }
 
     public static RcvServerConfig load() {

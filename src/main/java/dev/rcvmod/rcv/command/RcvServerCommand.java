@@ -111,7 +111,7 @@ public final class RcvServerCommand {
         }
 
         GraphOptions options = new GraphOptions(parsed.depth(), parsed.mask(), config.ncMode(), config.ppMode(),
-                parsed.region(), config.maxNodes, config.maxEdges, config.railRange);
+                parsed.region(), config.maxNodes, config.maxEdges, config.railRange, config.dustTrapdoorLegacy());
         ConnectionGraph graph = new ConnectionEngine(world, options, mode).compute(origin);
 
         if (graph.edgeCount() == 0) {

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 /** Mutable result of a traversal (nodes + merged edges). */
 public final class ConnectionGraph {
@@ -14,6 +15,16 @@ public final class ConnectionGraph {
     private final List<GraphNode> nodes = new ArrayList<>();
     private final List<GraphEdge> edges = new ArrayList<>();
     private final Map<Long, Integer> posIndex = new HashMap<>();
+    /**
+     * Junction nodes indexed by the <em>pair</em> of blocks they sit between. Deliberately separate
+     * from {@link #posIndex}: a junction's geometric position coincides with the midpoint of two
+     * occupied blocks, so routing it through {@link #addNode} would collapse it into the trap door's or
+     * the wire's own node - and the whole reason it exists is to <em>avoid</em> sharing an edge pair
+     * with the wire. Keying by the pair (rather than minting a fresh id per call) keeps
+     * {@link #addEdge}'s same-pair merge working, so re-deriving the same candidate twice cannot
+     * produce two visually identical edges.
+     */
+    private final Map<JunctionKey, Integer> junctionIndex = new HashMap<>();
     /** Stable id -> node lookup; the {@link #nodes} list is reordered for rendering, so ids are not indices. */
     private final Map<Integer, GraphNode> byId = new HashMap<>();
 
@@ -123,6 +134,37 @@ public final class ConnectionGraph {
             return NodeKind.COMPONENT;
         }
         return existing;
+    }
+
+    /**
+     * Adds the virtual node at the midpoint of two adjacent blocks, anchored on {@code anchorPos} for
+     * ordering and hit-testing only. Idempotent per pair and invisible to {@link #idOf}, so the BFS
+     * (which resolves nodes by {@code BlockPos}) can never mistake it for a real block.
+     */
+    public int addJunctionNode(BlockPos a, BlockPos b, BlockPos anchorPos, int depth) {
+        JunctionKey key = new JunctionKey(a, b);
+        Integer existingId = this.junctionIndex.get(key);
+        if (existingId != null) {
+            GraphNode existing = this.nodes.get(existingId);
+            if (depth < existing.depth) {
+                GraphNode updated = new GraphNode(existing.id, existing.pos, existing.blockId, existing.kind,
+                        existing.roles(), depth, existing.origin, existing.anchor);
+                this.nodes.set(existingId, updated);
+                this.byId.put(existingId, updated);
+            }
+            return existingId;
+        }
+        Vec3 anchor = Vec3.atCenterOf(a).add(Vec3.atCenterOf(b)).scale(0.5);
+        int id = this.nodes.size();
+        GraphNode node = new GraphNode(id, anchorPos, "rcv:junction", NodeKind.JUNCTION, Set.of(), depth, false,
+                anchor);
+        this.nodes.add(node);
+        this.byId.put(id, node);
+        this.junctionIndex.put(key, id);
+        return id;
+    }
+
+    private record JunctionKey(BlockPos a, BlockPos b) {
     }
 
     public void setOrigin(int id) {

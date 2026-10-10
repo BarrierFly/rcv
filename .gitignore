@@ -6,6 +6,11 @@ build/
 run/
 remappedSrc/
 
+# Minecraft's own log output when the unit tests bootstrap the game
+logs/
+versions/*/logs/
+versions/*/run/
+
 # IDE
 .idea/
 *.iml

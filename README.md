@@ -16,11 +16,11 @@ signal strength, nor detect faults.
 
 ## 功能 / Features
 
-- 13 类连接 / 13 connection types:
+- 16 类连接 / 16 connection types:
   激活 `direct_activation`、电路 `circuit`（含比较器侧输入 `comparator_side` 与中继器锁定
   `repeater_side`）、模拟读数 `analog`、充能 `charge`、半连接 / QC `half`、绊线 `tripwire`、
   活塞 `piston`、门两半 `door_pair`、轨道 `rail`、形状 `shape`、距离 `distance`、NC 更新 `nc`、
-  PP 更新 `pp`。
+  PP 更新 `pp`、粉板连接 `dust_trapdoor`。
 - **侧输入按拓扑判定**：比较器 `comparator_side` 连接所有可提供控制输入的强信号源
   （红石块 / 红石线 / 火把 / 拉杆 / 按钮 / 二极管 / 侦测器），不依赖当前信号或朝向；
   中继器 `repeater_side` 只连输出朝向它的二极管（原版 `sideInputDiodesOnly()`）。
@@ -44,6 +44,19 @@ signal strength, nor detect faults.
 - **距离 `distance`**：树叶之间双向；脚手架水平双向；下方支撑块 → 上方脚手架（有向，
   门/活板门即使当前 `open`、只要翻转会改变支撑也算）。栅栏门不参与：其 `getBlockSupportShape`
   不是完整面，`isFaceSturdy(UP)` 恒为假，无法支撑脚手架。
+- **粉板连接 `dust_trapdoor`**：建模 1.20 前被移除的原版机制——**关态上半活板门的开闭会决定相邻
+  红石线哪些方向接通**。它分**两段、极性相反**，都是「控制关系」，因此无论门当前开闭都存在：
+  - **前半段 `T → W`**：门控「线朝门那一向」的接通，开 ⇒ **断**；
+  - **后半段 `J → X`**：门控「线在垂直两向」的接通，开 ⇒ **通**（原版 `getConnectionState` 的
+    补全段正是靠被门控的那一向来决定是否把垂直两向顶成 `SIDE`，所以极性与前半段相反）；
+  - `J` 是门与线之间的**半格中点虚拟节点**，用小圆点画出。后半段挂在 `J` 上而不是 `W` 上，
+    否则会与线自己那条边撞同一 `(from,to)`，同对合并必丢一条。
+  - **箭头方向**：只有关态**上半**活板门能起作用（下半与开态的朝上碰撞面都不是完整面，
+    `canSurviveOn` 恒为假）；门正上方还必须有一根线（`shouldConnectTo(T.above())`）。
+- **反向箭头不是矛盾**：`T → W`（`dust_trapdoor`，读作「门在控制这根线」）与 `W → T`
+  （`direct_activation`，读作「这根线在给门供电」）会同时出现，它们是原版那个瞬时更新反馈环的两端。
+- **只读实时形状**：红石线的供能方向按原版 `getConnectionState` **实时重算**。两者在稳定世界里一致；形状过期（更新被跳过、悬浮尘、瞬时更新循环中间态）时
+  才不同，此时以原版为准。
 - **PP 默认档 = 仅侦测器 `observer_only`**：只显示侦测器侦测其正前方方块；可在配置中改为 `all`。
 - **NC 信号变化范围**：红石线按“信号变化”路径取 7 个核（线自身 + 其 6 邻）各自的 6 邻，
   共至多 42 点（重复已合并）；放置 / 破坏时的相邻线 6 邻属另一条路径，不在此列。
@@ -118,11 +131,28 @@ Windows PowerShell 使用 `.\gradlew.bat`。产物：`build/libs/rcv-mc<version>
   且其落在 `incoming` 的 ±2 扫描内时才会被顺带命中）。
 - 同一 `(from,to)` 只保留优先级最高的一条边，因此 NC 会盖住同对的 PP（需用 `--no-nc`
   单独查看 PP）；比较器 / 中继器侧输入也遵循此合并规则。
+- **粉板连接的判定依赖 `dustTrapdoor` 配置项（默认 `auto`）**：
+  - `auto` 会构造一个最小的合成世界，直接调用当前 JVM 里**真实的** `RedStoneWireBlock`，
+    问「开态活板门旁那根线还供不供能」。已加载类上的 mixin 直接生效，所以对
+    Carpet TIS Addition、AntiShadowPatch 以及任何未知复原实现都成立，无需白名单。
+    探针失败（签名异常等）会记 WARN 并退回「按 mod id 读配置」，仍无结论则按 `off` 处理
+    ——宁可少画，不画出现实中不存在的边。
+  - `on` / `off` 强制指定，用于手工纠正。
+  - 结果按 JVM 缓存，`/rcv reload` 与配置保存时重探。carpet 规则是运行时读取的，rcv 是静态
+    分析工具，不追这个实时性。
+  - ⚠️ **形态盲区**：`S+C` / `C only` 在**客户端**计算。若复原 mod 是**真正仅服务端**的，
+    客户端 JVM 里没有该 mixin，探针会判为「未复原」，与服务端实际不一致——此时请用 `on` 手动纠正。
+- **粉板连接的两个隐含前提**（不是 bug，是原版语义）：
+  - 线**对面那向**也接通时，垂直两向不会被门控（后段不生成）；
+  - 线**某条垂直向本来就接通**时，朝门那向才不会被补全顶回 `SIDE`（前段才成立）。两条垂直向都空
+    且对面也空时，补全反而会**掩盖**门控，此时只有后段生成。
+- 瞬时更新循环的**中间态**下，线的存量形状可能四项全 `NONE`（dot），原版会因此跳过补全段，
+  结果与稳态相反。rcv 读取存量并按原版走，故**不**假设「一定不是 dot」。
 
 ## 配置 / Config
 
-- `config/rcv-client.json`：颜色、备用调色板、节点线宽 / 边线宽、默认深度、显示类型、HUD、自动清理、魔杖物品、PP/NC 模式。
-- `config/rcv-server.json`：启用、权限、最大深度 / 节点 / 边、NC/PP 模式、轨道范围。
+- `config/rcv-client.json`：颜色、备用调色板、节点线宽 / 边线宽、默认深度、显示类型、HUD、自动清理、魔杖物品、PP/NC 模式、`dustTrapdoor`（`auto|on|off`）。
+- `config/rcv-server.json`：启用、权限、最大深度 / 节点 / 边、NC/PP 模式、轨道范围、`dustTrapdoor`（`auto|on|off`）。
 - GUI 依赖软依赖（`recommends`）：**Cloth Config** 与 **ModMenu**；缺失时 `/rcv config` 会给出提示。
 
 ## 致谢 / Credits

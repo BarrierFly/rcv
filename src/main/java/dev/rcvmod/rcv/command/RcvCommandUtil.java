@@ -3,12 +3,15 @@ package dev.rcvmod.rcv.command;
 import dev.rcvmod.rcv.core.ConnectionGraph;
 import dev.rcvmod.rcv.core.EdgeType;
 import dev.rcvmod.rcv.core.GraphNode;
+import dev.rcvmod.rcv.core.NodeKind;
 import dev.rcvmod.rcv.core.Region;
 import dev.rcvmod.rcv.core.TypeMask;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.phys.Vec3;
 
 /** Shared parsing/formatting for the server and client {@code /rcv} commands. */
 public final class RcvCommandUtil {
@@ -84,9 +87,9 @@ public final class RcvCommandUtil {
             GraphNode to = graph.node(edge.to);
             StringBuilder sb = new StringBuilder("  ");
             sb.append(edge.type.id()).append(": ")
-                    .append(from == null ? "?" : from.pos.toShortString())
+                    .append(where(from))
                     .append(edge.directed ? " -> " : " <-> ")
-                    .append(to == null ? "?" : to.pos.toShortString());
+                    .append(where(to));
             if (edge.hasVia()) {
                 sb.append(" via ").append(edge.via());
             }
@@ -96,5 +99,20 @@ public final class RcvCommandUtil {
             lines.add(Component.literal(sb.toString()));
         }
         return lines;
+    }
+
+    /**
+     * A junction's {@code pos} is only an ordering anchor, so printing it would make its edge
+     * indistinguishable from the real block's edge to the same target.
+     */
+    private static String where(GraphNode node) {
+        if (node == null) {
+            return "?";
+        }
+        if (node.kind == NodeKind.JUNCTION) {
+            Vec3 anchor = node.center();
+            return String.format(Locale.ROOT, "midpoint(%.1f/%.1f/%.1f)", anchor.x, anchor.y, anchor.z);
+        }
+        return node.pos.toShortString();
     }
 }

@@ -5,6 +5,8 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.rcvmod.rcv.RCV;
+import dev.rcvmod.rcv.core.DustTrapdoorEra;
+import dev.rcvmod.rcv.core.DustTrapdoorMode;
 import dev.rcvmod.rcv.core.EdgeType;
 import dev.rcvmod.rcv.core.NcMode;
 import dev.rcvmod.rcv.core.PpMode;
@@ -32,6 +34,8 @@ public final class RcvConfig {
     public String wandItem = "minecraft:purple_dye";
     public String ppMode = PpMode.OBSERVER_ONLY.name();
     public String ncMode = NcMode.OFF.name();
+    /** {@code auto|on|off}; see {@link DustTrapdoorMode}. */
+    public String dustTrapdoor = DustTrapdoorMode.AUTO.name();
     public Map<String, Boolean> enabledTypes = new LinkedHashMap<>();
     public Map<String, Integer> colors = new LinkedHashMap<>();
     public Map<String, Integer> colorsColorBlind = new LinkedHashMap<>();
@@ -70,6 +74,15 @@ public final class RcvConfig {
         return NcMode.valueOf(this.ncMode);
     }
 
+    public DustTrapdoorMode dustTrapdoorMode() {
+        return DustTrapdoorMode.parse(this.dustTrapdoor);
+    }
+
+    /** Whether dust-trapdoor edges are computed from the client side. */
+    public boolean dustTrapdoorLegacy() {
+        return DustTrapdoorEra.legacy(this.dustTrapdoorMode());
+    }
+
     public int color(EdgeType type) {
         Map<String, Integer> map = this.alternatePalette ? this.colorsColorBlind : this.colors;
         Integer color = map.get(type.name());
@@ -94,6 +107,7 @@ public final class RcvConfig {
                 case DISTANCE -> 0xFF7CB342;
                 case NC -> 0xFF8B4513;
                 case PP -> 0xFF0072B2;
+                case DUST_TRAPDOOR -> 0xFFD55E00;
             };
         }
         return switch (type) {
@@ -112,6 +126,7 @@ public final class RcvConfig {
             case DISTANCE -> 0xFF7FD14A;
             case NC -> 0xFFAA1111;
             case PP -> 0xFF3B7BFF;
+            case DUST_TRAPDOOR -> 0xFF00BFA5;
         };
     }
 
@@ -157,6 +172,9 @@ public final class RcvConfig {
             Path path = configPath();
             Files.createDirectories(path.getParent());
             Files.writeString(path, GSON.toJson(this), StandardCharsets.UTF_8);
+            // Saving is the only point where the override can have changed; drop the memoised probe
+            // result so the next query re-reads it.
+            DustTrapdoorEra.reset();
         } catch (IOException e) {
             RCV.LOGGER.warn("Failed to write RCV client config", e);
         }

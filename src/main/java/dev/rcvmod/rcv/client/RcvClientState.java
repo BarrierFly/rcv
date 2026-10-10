@@ -118,7 +118,8 @@ public final class RcvClientState {
         }
         RcvConfig config = RcvConfig.get();
         GraphOptions options = new GraphOptions(depth, typeMask, config.ncMode(), config.ppMode(), region,
-                GraphOptions.MAX_NODES, GraphOptions.MAX_EDGES);
+                GraphOptions.MAX_NODES, GraphOptions.MAX_EDGES, GraphOptions.DEFAULT_RAIL_RANGE,
+                config.dustTrapdoorLegacy());
         graph = new ConnectionEngine(world, options, mode).compute(origin);
         ticksSinceQuery = 0;
     }

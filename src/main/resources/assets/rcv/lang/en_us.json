@@ -35,6 +35,8 @@
   "rcv.config.wand_item": "Wand item",
   "rcv.config.pp_mode": "PP mode",
   "rcv.config.nc_mode": "NC mode",
+  "rcv.config.dust_trapdoor": "Dust-trapdoor gate",
+  "rcv.config.dust_trapdoor.tooltip": "Whether a trap door still decides how the adjacent wire connects (pre-1.20 behaviour). AUTO probes the loaded game; ON/OFF force it.",
   "rcv.edge.direct_activation": "direct activation",
   "rcv.edge.circuit": "circuit",
   "rcv.edge.comparator_side": "comparator side",
@@ -49,5 +51,6 @@
   "rcv.edge.shape": "shape",
   "rcv.edge.distance": "distance",
   "rcv.edge.nc": "neighbor update",
-  "rcv.edge.pp": "shape update"
+  "rcv.edge.pp": "shape update",
+  "rcv.edge.dust_trapdoor": "dust-trapdoor"
 }

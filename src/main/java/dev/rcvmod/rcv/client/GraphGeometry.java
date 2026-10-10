@@ -20,6 +20,7 @@ public final class GraphGeometry {
     private static final int CONDUCTOR_COLOR = 0xFF8A8A8A;
     private static final int MOVED_COLOR = 0xFFFFAA33;
     private static final int VIA_COLOR = 0xFFFF66FF;
+    private static final int JUNCTION_COLOR = 0xFF00BFA5;
     private static final int ORIGIN_COLOR = 0xFFFFFFFF;
 
     private GraphGeometry() {
@@ -68,9 +69,10 @@ public final class GraphGeometry {
     }
 
     private static void appendNode(List<Segment> segments, GraphNode node, RcvConfig config) {
-        double cx = node.pos.getX() + 0.5;
-        double cy = node.pos.getY() + 0.5;
-        double cz = node.pos.getZ() + 0.5;
+        Vec3 center = node.center();
+        double cx = center.x;
+        double cy = center.y;
+        double cz = center.z;
         int color;
         double half;
         if (node.origin) {
@@ -85,6 +87,10 @@ public final class GraphGeometry {
         } else if (node.kind == NodeKind.VIA) {
             color = VIA_COLOR;
             half = 0.22;
+        } else if (node.kind == NodeKind.JUNCTION) {
+            // A junction is not a block; a small marker keeps it from reading as one.
+            color = JUNCTION_COLOR;
+            half = 0.12;
         } else {
             color = COMPONENT_COLOR;
             half = 0.28;
@@ -108,7 +114,8 @@ public final class GraphGeometry {
         }
         int color = withAlpha(config.color(edge.type), alphaForDepth(from.depth));
         float width = config.edgeLineWidth;
-        Vec3 a = Vec3.atCenterOf(from.pos);
+        Vec3 a = from.center();
+        Vec3 b = to.center();
         if (edge.hasVia()) {
             Vec3 previous = a;
             for (BlockPos via : edge.via()) {
@@ -116,12 +123,12 @@ public final class GraphGeometry {
                 segments.add(new Segment(previous, next, color, width));
                 previous = next;
             }
-            segments.add(new Segment(previous, Vec3.atCenterOf(to.pos), color, width));
+            segments.add(new Segment(previous, b, color, width));
         } else {
-            segments.add(new Segment(a, Vec3.atCenterOf(to.pos), color, width));
+            segments.add(new Segment(a, b, color, width));
         }
         if (edge.directed) {
-            appendArrow(segments, a, Vec3.atCenterOf(to.pos), color, width);
+            appendArrow(segments, a, b, color, width);
         }
     }
 
